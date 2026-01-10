@@ -18,6 +18,17 @@ import (
 	"github.com/refyne/refyne/pkg/schema"
 )
 
+// wrappedResult wraps extracted data with metadata.
+type wrappedResult struct {
+	Metadata resultMetadata `json:"_metadata"`
+	Data     any            `json:"data"`
+}
+
+type resultMetadata struct {
+	URL       string    `json:"url"`
+	FetchedAt time.Time `json:"fetched_at"`
+}
+
 var scrapeCmd = &cobra.Command{
 	Use:   "scrape",
 	Short: "Extract structured data from URLs",
@@ -58,6 +69,7 @@ func init() {
 	// Output settings
 	flags.StringP("output", "o", "", "output file (default: stdout)")
 	flags.String("format", "json", "output format: json, jsonl, yaml")
+	flags.Bool("include-metadata", false, "wrap output with _metadata (url, fetched_at) and data keys")
 
 	// Fetch settings
 	flags.String("fetch-mode", "auto", "fetch mode: auto, static, dynamic")
@@ -191,6 +203,9 @@ func runScrape(cmd *cobra.Command, args []string) error {
 	}
 	defer func() { _ = writer.Close() }()
 
+	// Get metadata option
+	includeMetadata, _ := cmd.Flags().GetBool("include-metadata")
+
 	// Get crawling options
 	followSelector, _ := cmd.Flags().GetString("follow")
 	followPattern, _ := cmd.Flags().GetString("follow-pattern")
@@ -249,7 +264,17 @@ func runScrape(cmd *cobra.Command, args []string) error {
 			}
 
 			if result.Data != nil {
-				if err := writer.Write(result.Data); err != nil {
+				out := any(result.Data)
+				if includeMetadata {
+					out = wrappedResult{
+						Metadata: resultMetadata{
+							URL:       result.URL,
+							FetchedAt: result.FetchedAt,
+						},
+						Data: result.Data,
+					}
+				}
+				if err := writer.Write(out); err != nil {
 					logger.Error("failed to write output", "error", err)
 					return err
 				}
@@ -277,7 +302,17 @@ func runScrape(cmd *cobra.Command, args []string) error {
 				continue
 			}
 
-			if err := writer.Write(result.Data); err != nil {
+			out := any(result.Data)
+			if includeMetadata {
+				out = wrappedResult{
+					Metadata: resultMetadata{
+						URL:       result.URL,
+						FetchedAt: result.FetchedAt,
+					},
+					Data: result.Data,
+				}
+			}
+			if err := writer.Write(out); err != nil {
 				logger.Error("failed to write output", "error", err)
 				return err
 			}

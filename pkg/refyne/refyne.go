@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/refyne/refyne/internal/crawler"
 	"github.com/refyne/refyne/internal/extractor"
@@ -15,6 +16,7 @@ import (
 // Result represents an extraction result.
 type Result struct {
 	URL        string
+	FetchedAt  time.Time
 	Data       any
 	Raw        string
 	Errors     []schema.ValidationError
@@ -95,9 +97,10 @@ func (r *Refyne) Extract(ctx context.Context, url string, s schema.Schema) (*Res
 	}
 
 	return &Result{
-		URL:  url,
-		Data: result.Data,
-		Raw:  result.Raw,
+		URL:       url,
+		FetchedAt: content.FetchedAt,
+		Data:      result.Data,
+		Raw:       result.Raw,
 		TokenUsage: TokenUsage{
 			InputTokens:  result.Usage.InputTokens,
 			OutputTokens: result.Usage.OutputTokens,
@@ -166,9 +169,10 @@ func (r *Refyne) CrawlMany(ctx context.Context, seeds []string, s schema.Schema,
 		defer close(results)
 		for cr := range crawlResults {
 			results <- &Result{
-				URL:  cr.URL,
-				Data: cr.Data,
-				Raw:  cr.Raw,
+				URL:       cr.URL,
+				FetchedAt: cr.FetchedAt,
+				Data:      cr.Data,
+				Raw:       cr.Raw,
 				TokenUsage: TokenUsage{
 					InputTokens:  cr.Usage.Usage.InputTokens,
 					OutputTokens: cr.Usage.Usage.OutputTokens,
