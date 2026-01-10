@@ -1,0 +1,93 @@
+version: '3'
+
+vars:
+  VERSION:
+    sh: git describe --tags --always --dirty 2>/dev/null || echo "dev"
+  COMMIT:
+    sh: git rev-parse --short HEAD 2>/dev/null || echo "unknown"
+  BUILD_DATE:
+    sh: date -u +"%Y-%m-%dT%H:%M:%SZ"
+  LDFLAGS: >-
+    -X github.com/refyne/refyne/cmd/refyne/commands.Version={{.VERSION}}
+    -X github.com/refyne/refyne/cmd/refyne/commands.Commit={{.COMMIT}}
+    -X github.com/refyne/refyne/cmd/refyne/commands.BuildDate={{.BUILD_DATE}}
+
+tasks:
+  default:
+    desc: Build the CLI
+    cmds:
+      - task: build
+
+  build:
+    desc: Build the CLI binary
+    cmds:
+      - go build -ldflags "{{.LDFLAGS}}" -o bin/refyne ./cmd/refyne
+    sources:
+      - "**/*.go"
+    generates:
+      - bin/refyne
+
+  install:
+    desc: Install the CLI to $GOPATH/bin
+    cmds:
+      - go install -ldflags "{{.LDFLAGS}}" ./cmd/refyne
+
+  test:
+    desc: Run tests
+    cmds:
+      - go test -v ./...
+
+  test:coverage:
+    desc: Run tests with coverage
+    cmds:
+      - go test -v -coverprofile=coverage.out ./...
+      - go tool cover -html=coverage.out -o coverage.html
+    generates:
+      - coverage.out
+      - coverage.html
+
+  clean:
+    desc: Clean build artifacts
+    cmds:
+      - rm -rf bin/
+      - rm -f coverage.out coverage.html
+
+  fmt:
+    desc: Format code
+    cmds:
+      - go fmt ./...
+      - goimports -w . 2>/dev/null || true
+
+  lint:
+    desc: Run linter (requires golangci-lint)
+    cmds:
+      - golangci-lint run
+
+  deps:
+    desc: Update dependencies
+    cmds:
+      - go mod tidy
+      - go mod download
+
+  release:
+    desc: Build for multiple platforms
+    cmds:
+      - GOOS=linux GOARCH=amd64 go build -ldflags "{{.LDFLAGS}}" -o bin/refyne-linux-amd64 ./cmd/refyne
+      - GOOS=darwin GOARCH=amd64 go build -ldflags "{{.LDFLAGS}}" -o bin/refyne-darwin-amd64 ./cmd/refyne
+      - GOOS=darwin GOARCH=arm64 go build -ldflags "{{.LDFLAGS}}" -o bin/refyne-darwin-arm64 ./cmd/refyne
+      - GOOS=windows GOARCH=amd64 go build -ldflags "{{.LDFLAGS}}" -o bin/refyne-windows-amd64.exe ./cmd/refyne
+
+  run:
+    desc: Run the CLI with arguments
+    cmds:
+      - go run ./cmd/refyne {{.CLI_ARGS}}
+
+  example:recipes:
+    desc: Run the recipes example
+    cmds:
+      - go run ./examples/recipes {{.CLI_ARGS}}
+
+  example:realestate:
+    desc: Run the real estate example
+    cmds:
+      - go run ./examples/realestate {{.CLI_ARGS}}
