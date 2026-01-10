@@ -76,7 +76,7 @@ func init() {
 	// Output settings
 	flags.StringP("output", "o", "", "output file (default: stdout)")
 	flags.String("format", "json", "output format: json, jsonl, yaml")
-	flags.Bool("include-metadata", false, "wrap output with _metadata (url, fetched_at) and data keys")
+	flags.Bool("include-metadata", true, "wrap output with _metadata and data keys (use --include-metadata=false to disable)")
 
 	// Fetch settings
 	flags.String("fetch-mode", "auto", "fetch mode: auto, static, dynamic")
