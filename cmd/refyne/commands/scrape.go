@@ -110,7 +110,7 @@ func runScrape(cmd *cobra.Command, args []string) error {
 	logger.Debug("loading schema", "path", schemaPath)
 	s, err := schema.FromFile(schemaPath)
 	if err != nil {
-		logError("failed to load schema: %v", err)
+		logger.Error("failed to load schema", "error", err)
 		return err
 	}
 	logger.Debug("schema loaded", "name", s.Name, "fields", len(s.Fields))
@@ -165,7 +165,7 @@ func runScrape(cmd *cobra.Command, args []string) error {
 		refyne.WithMaxRetries(maxRetries),
 	)
 	if err != nil {
-		logError("failed to initialize: %v", err)
+		logger.Error("failed to initialize", "error", err)
 		return err
 	}
 	defer func() { _ = r.Close() }()
@@ -176,7 +176,7 @@ func runScrape(cmd *cobra.Command, args []string) error {
 	if outPath, _ := cmd.Flags().GetString("output"); outPath != "" {
 		f, err := os.Create(outPath) //#nosec G304 -- CLI tool writes to user-specified output file
 		if err != nil {
-			logError("failed to create output file: %v", err)
+			logger.Error("failed to create output file", "path", outPath, "error", err)
 			return err
 		}
 		defer func() { _ = f.Close() }()
@@ -186,7 +186,7 @@ func runScrape(cmd *cobra.Command, args []string) error {
 	formatStr, _ := cmd.Flags().GetString("format")
 	writer, err := output.NewWriter(outFile, output.Format(formatStr))
 	if err != nil {
-		logError("failed to create output writer: %v", err)
+		logger.Error("failed to create output writer", "format", formatStr, "error", err)
 		return err
 	}
 	defer func() { _ = writer.Close() }()
@@ -208,7 +208,12 @@ func runScrape(cmd *cobra.Command, args []string) error {
 
 	if isCrawling {
 		// Crawling mode
-		logInfo("Starting crawl from %d seed URL(s)...", len(urls))
+		logger.Info("starting crawl",
+			"seeds", len(urls),
+			"provider", provider,
+			"model", model,
+			"concurrency", concurrency,
+			"delay", delay)
 
 		crawlOpts := []refyne.CrawlOption{
 			refyne.WithMaxDepth(maxDepth),
@@ -245,17 +250,21 @@ func runScrape(cmd *cobra.Command, args []string) error {
 
 			if result.Data != nil {
 				if err := writer.Write(result.Data); err != nil {
-					logError("failed to write output: %v", err)
+					logger.Error("failed to write output", "error", err)
 					return err
 				}
 				count++
 			}
 		}
 
-		logInfo("Completed: %d extracted, %d errors", count, errorCount)
+		logger.Info("crawl complete", "extracted", count, "errors", errorCount)
 	} else {
 		// Simple extraction mode
-		logInfo("Extracting from %d URL(s)...", len(urls))
+		logger.Info("starting extraction",
+			"urls", len(urls),
+			"provider", provider,
+			"model", model,
+			"concurrency", concurrency)
 
 		results := r.ExtractMany(ctx, urls, s, concurrency)
 
@@ -269,13 +278,13 @@ func runScrape(cmd *cobra.Command, args []string) error {
 			}
 
 			if err := writer.Write(result.Data); err != nil {
-				logError("failed to write output: %v", err)
+				logger.Error("failed to write output", "error", err)
 				return err
 			}
 			count++
 		}
 
-		logInfo("Completed: %d extracted, %d errors", count, errorCount)
+		logger.Info("extraction complete", "extracted", count, "errors", errorCount)
 	}
 
 	if hasErrors {

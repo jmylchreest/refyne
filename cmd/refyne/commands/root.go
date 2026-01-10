@@ -2,7 +2,6 @@
 package commands
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -73,16 +72,4 @@ func initConfig() {
 // Execute runs the root command.
 func Execute() error {
 	return rootCmd.Execute()
-}
-
-// logError prints an error message to stderr.
-func logError(format string, args ...any) {
-	fmt.Fprintf(os.Stderr, "Error: "+format+"\n", args...)
-}
-
-// logInfo prints an info message to stderr (unless quiet mode).
-func logInfo(format string, args ...any) {
-	if !viper.GetBool("quiet") {
-		fmt.Fprintf(os.Stderr, format+"\n", args...)
-	}
 }
