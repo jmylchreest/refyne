@@ -73,8 +73,8 @@ func init() {
 	flags.Int("max-depth", 1, "max link depth (0=seed only)")
 	flags.Int("max-pages", 0, "max pagination pages (0=unlimited)")
 	flags.Int("max-urls", 0, "max total URLs to process (0=unlimited)")
-	flags.Duration("delay", 500*time.Millisecond, "delay between requests")
-	flags.IntP("concurrency", "c", 1, "concurrent requests")
+	flags.Duration("delay", 200*time.Millisecond, "delay between requests")
+	flags.IntP("concurrency", "c", 3, "concurrent requests")
 
 	// Required flags
 	_ = scrapeCmd.MarkFlagRequired("schema")

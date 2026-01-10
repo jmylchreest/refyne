@@ -56,8 +56,8 @@ func DefaultConfig() Config {
 		MaxDepth:         1,
 		MaxPages:         0, // unlimited
 		MaxURLs:          0, // unlimited
-		Delay:            500 * time.Millisecond,
-		Concurrency:      1,
+		Delay:            200 * time.Millisecond,
+		Concurrency:      3,
 		ExtractFromSeeds: false,
 	}
 }
