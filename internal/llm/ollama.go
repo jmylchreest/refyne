@@ -59,6 +59,7 @@ type ollamaOptions struct {
 }
 
 type ollamaResponse struct {
+	Model           string        `json:"model"`
 	Message         ollamaMessage `json:"message"`
 	Done            bool          `json:"done"`
 	PromptEvalCount int           `json:"prompt_eval_count"`
@@ -128,6 +129,7 @@ func (p *OllamaProvider) Complete(ctx context.Context, req CompletionRequest) (C
 			InputTokens:  ollamaResp.PromptEvalCount,
 			OutputTokens: ollamaResp.EvalCount,
 		},
+		Model: ollamaResp.Model,
 	}, nil
 }
 

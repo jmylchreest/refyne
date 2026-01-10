@@ -15,14 +15,18 @@ import (
 
 // Result represents an extraction result.
 type Result struct {
-	URL        string
-	FetchedAt  time.Time
-	Data       any
-	Raw        string
-	Errors     []schema.ValidationError
-	TokenUsage TokenUsage
-	RetryCount int
-	Error      error
+	URL             string
+	FetchedAt       time.Time
+	Data            any
+	Raw             string
+	Errors          []schema.ValidationError
+	TokenUsage      TokenUsage
+	Model           string        // Actual model used (may differ from requested for auto-routing)
+	Provider        string        // Provider name (anthropic, openai, openrouter, ollama)
+	RetryCount      int
+	FetchDuration   time.Duration // Time to fetch the page
+	ExtractDuration time.Duration // Time for LLM extraction
+	Error           error
 }
 
 // TokenUsage tracks LLM token consumption.
@@ -82,10 +86,12 @@ func New(opts ...Option) (*Refyne, error) {
 // Extract fetches a single URL and extracts structured data.
 func (r *Refyne) Extract(ctx context.Context, url string, s schema.Schema) (*Result, error) {
 	// Fetch the page
+	fetchStart := time.Now()
 	content, err := r.fetcher.Fetch(ctx, url, scraper.FetchOptions{
 		UserAgent: r.config.UserAgent,
 		Timeout:   r.config.Timeout,
 	})
+	fetchDuration := time.Since(fetchStart)
 	if err != nil {
 		return nil, fmt.Errorf("fetch failed: %w", err)
 	}
@@ -105,8 +111,12 @@ func (r *Refyne) Extract(ctx context.Context, url string, s schema.Schema) (*Res
 			InputTokens:  result.Usage.InputTokens,
 			OutputTokens: result.Usage.OutputTokens,
 		},
-		RetryCount: result.RetryCount,
-		Errors:     result.Errors,
+		Model:           result.Model,
+		Provider:        result.Provider,
+		RetryCount:      result.RetryCount,
+		FetchDuration:   fetchDuration,
+		ExtractDuration: result.LLMDuration,
+		Errors:          result.Errors,
 	}, nil
 }
 
@@ -177,9 +187,13 @@ func (r *Refyne) CrawlMany(ctx context.Context, seeds []string, s schema.Schema,
 					InputTokens:  cr.Usage.Usage.InputTokens,
 					OutputTokens: cr.Usage.Usage.OutputTokens,
 				},
-				RetryCount: cr.Usage.RetryCount,
-				Errors:     cr.Errors,
-				Error:      cr.Error,
+				Model:           cr.Usage.Model,
+				Provider:        cr.Usage.Provider,
+				RetryCount:      cr.Usage.RetryCount,
+				FetchDuration:   cr.FetchDuration,
+				ExtractDuration: cr.ExtractDuration,
+				Errors:          cr.Errors,
+				Error:           cr.Error,
 			}
 		}
 	}()

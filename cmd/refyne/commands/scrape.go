@@ -25,8 +25,15 @@ type wrappedResult struct {
 }
 
 type resultMetadata struct {
-	URL       string    `json:"url"`
-	FetchedAt time.Time `json:"fetched_at"`
+	URL             string  `json:"url"`
+	FetchedAt       string  `json:"fetched_at"`
+	Model           string  `json:"model"`
+	Provider        string  `json:"provider"`
+	InputTokens     int     `json:"input_tokens"`
+	OutputTokens    int     `json:"output_tokens"`
+	FetchDurationMs int64   `json:"fetch_duration_ms"`
+	LLMDurationMs   int64   `json:"llm_duration_ms"`
+	RetryCount      int     `json:"retry_count,omitempty"`
 }
 
 var scrapeCmd = &cobra.Command{
@@ -268,8 +275,15 @@ func runScrape(cmd *cobra.Command, args []string) error {
 				if includeMetadata {
 					out = wrappedResult{
 						Metadata: resultMetadata{
-							URL:       result.URL,
-							FetchedAt: result.FetchedAt,
+							URL:             result.URL,
+							FetchedAt:       result.FetchedAt.Format(time.RFC3339),
+							Model:           result.Model,
+							Provider:        result.Provider,
+							InputTokens:     result.TokenUsage.InputTokens,
+							OutputTokens:    result.TokenUsage.OutputTokens,
+							FetchDurationMs: result.FetchDuration.Milliseconds(),
+							LLMDurationMs:   result.ExtractDuration.Milliseconds(),
+							RetryCount:      result.RetryCount,
 						},
 						Data: result.Data,
 					}
@@ -306,8 +320,15 @@ func runScrape(cmd *cobra.Command, args []string) error {
 			if includeMetadata {
 				out = wrappedResult{
 					Metadata: resultMetadata{
-						URL:       result.URL,
-						FetchedAt: result.FetchedAt,
+						URL:             result.URL,
+						FetchedAt:       result.FetchedAt.Format(time.RFC3339),
+						Model:           result.Model,
+						Provider:        result.Provider,
+						InputTokens:     result.TokenUsage.InputTokens,
+						OutputTokens:    result.TokenUsage.OutputTokens,
+						FetchDurationMs: result.FetchDuration.Milliseconds(),
+						LLMDurationMs:   result.ExtractDuration.Milliseconds(),
+						RetryCount:      result.RetryCount,
 					},
 					Data: result.Data,
 				}

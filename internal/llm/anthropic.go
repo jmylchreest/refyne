@@ -134,6 +134,7 @@ func (p *AnthropicProvider) Complete(ctx context.Context, req CompletionRequest)
 			InputTokens:  int(resp.Usage.InputTokens),
 			OutputTokens: int(resp.Usage.OutputTokens),
 		},
+		Model: string(resp.Model),
 	}, nil
 }
 

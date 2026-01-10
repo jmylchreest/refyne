@@ -40,6 +40,7 @@ type CompletionResponse struct {
 	Content      string
 	FinishReason string
 	Usage        Usage
+	Model        string // Actual model used (may differ from requested for auto-routing)
 }
 
 // Provider is the core abstraction over LLM backends.

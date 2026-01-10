@@ -104,6 +104,7 @@ func (p *OpenAIProvider) Complete(ctx context.Context, req CompletionRequest) (C
 			InputTokens:  int(resp.Usage.PromptTokens),
 			OutputTokens: int(resp.Usage.CompletionTokens),
 		},
+		Model: resp.Model,
 	}, nil
 }
 

@@ -17,6 +17,8 @@ type ExtractionResult struct {
 	Raw         string                   // Raw LLM response
 	Errors      []schema.ValidationError // Validation errors (if any)
 	Usage       llm.Usage                // Token usage
+	Model       string                   // Actual model used (may differ from requested)
+	Provider    string                   // Provider name
 	RetryCount  int                      // Number of retries performed
 	LLMDuration time.Duration            // Time spent in LLM calls
 }
@@ -127,11 +129,13 @@ func (e *Extractor) Extract(ctx context.Context, content string, s schema.Schema
 				result.Usage = totalUsage
 				result.RetryCount = attempt
 				result.LLMDuration = totalLLMDuration
+				// Model and Provider are already set by extractOnce
 				logger.Debug("extractor success",
 					"total_attempts", attempt+1,
 					"total_input_tokens", totalUsage.InputTokens,
 					"total_output_tokens", totalUsage.OutputTokens,
-					"llm_duration", totalLLMDuration)
+					"llm_duration", totalLLMDuration,
+					"model", result.Model)
 				return result, nil
 			}
 
@@ -220,9 +224,11 @@ func (e *Extractor) extractOnce(ctx context.Context, content string, s schema.Sc
 
 	logger.Debug("extractor response parsed successfully")
 	return ExtractionResult{
-		Data:  data,
-		Raw:   resp.Content,
-		Usage: resp.Usage,
+		Data:     data,
+		Raw:      resp.Content,
+		Usage:    resp.Usage,
+		Model:    resp.Model,
+		Provider: e.provider.Name(),
 	}, nil
 }
 
