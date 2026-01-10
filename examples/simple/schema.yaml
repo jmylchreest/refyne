@@ -1,0 +1,35 @@
+name: WebPage
+description: |
+  Extract basic information from any webpage including the title,
+  a summary of the main content, and any key facts or data points.
+
+fields:
+  - name: title
+    type: string
+    description: "The page title"
+    required: true
+
+  - name: summary
+    type: string
+    description: "A brief summary of the main content (2-3 sentences)"
+    required: true
+
+  - name: key_points
+    type: array
+    description: "Key facts, data points, or takeaways from the page"
+    items:
+      type: string
+
+  - name: links_mentioned
+    type: array
+    description: "Important external resources or links mentioned in the content"
+    items:
+      type: string
+
+  - name: author
+    type: string
+    description: "Author name if present"
+
+  - name: date
+    type: string
+    description: "Publication or last updated date if present"

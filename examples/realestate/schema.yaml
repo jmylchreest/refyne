@@ -1,0 +1,53 @@
+name: PropertyListing
+description: |
+  A real estate property listing page. Extract property details including
+  the listing title, price, address, bedroom/bathroom counts, square footage,
+  features, and image URLs.
+
+fields:
+  - name: title
+    type: string
+    description: "Property listing title or headline"
+    required: true
+
+  - name: price
+    type: integer
+    description: "Listing price as a number (no currency symbols or commas)"
+    required: true
+
+  - name: address
+    type: string
+    description: "Full property address"
+    required: true
+
+  - name: bedrooms
+    type: integer
+    description: "Number of bedrooms"
+
+  - name: bathrooms
+    type: number
+    description: "Number of bathrooms (can be 1.5, 2.5, etc.)"
+
+  - name: square_feet
+    type: integer
+    description: "Living area in square feet"
+
+  - name: property_type
+    type: string
+    description: "Type of property (house, apartment, condo, townhouse, land)"
+
+  - name: description
+    type: string
+    description: "Full property description text"
+
+  - name: features
+    type: array
+    description: "List of property features (pool, garage, fireplace, etc.)"
+    items:
+      type: string
+
+  - name: images
+    type: array
+    description: "URLs of property photos"
+    items:
+      type: string

@@ -9,6 +9,7 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/gocolly/colly/v2"
+	"github.com/refyne/refyne/internal/logger"
 )
 
 // StaticFetcher uses Colly for static HTML fetching.
@@ -29,15 +30,19 @@ func NewStaticFetcher(cfg FetcherConfig) *StaticFetcher {
 
 // Fetch retrieves page content using Colly.
 func (f *StaticFetcher) Fetch(ctx context.Context, targetURL string, opts FetchOptions) (PageContent, error) {
+	logger.Debug("static fetch starting", "url", targetURL)
+
 	result := PageContent{
 		URL:       targetURL,
 		FetchedAt: time.Now(),
 	}
 
 	// Create a new collector for each request
+	userAgent := coalesce(opts.UserAgent, f.config.UserAgent)
 	c := colly.NewCollector(
-		colly.UserAgent(coalesce(opts.UserAgent, f.config.UserAgent)),
+		colly.UserAgent(userAgent),
 	)
+	logger.Debug("static fetch configured", "user_agent", userAgent)
 
 	// Set timeout
 	timeout := opts.Timeout
@@ -45,6 +50,7 @@ func (f *StaticFetcher) Fetch(ctx context.Context, targetURL string, opts FetchO
 		timeout = f.config.Timeout
 	}
 	c.SetRequestTimeout(timeout)
+	logger.Debug("static fetch timeout set", "timeout", timeout)
 
 	// Set custom headers
 	if len(opts.Headers) > 0 {
@@ -62,18 +68,27 @@ func (f *StaticFetcher) Fetch(ctx context.Context, targetURL string, opts FetchO
 		result.StatusCode = r.StatusCode
 		result.ContentType = r.Headers.Get("Content-Type")
 		result.HTML = string(r.Body)
+		logger.Debug("static fetch response received",
+			"status", r.StatusCode,
+			"content_type", result.ContentType,
+			"body_size", len(r.Body))
 	})
 
 	// Handle errors
 	c.OnError(func(r *colly.Response, err error) {
+		statusCode := 0
 		if r != nil {
-			result.StatusCode = r.StatusCode
+			statusCode = r.StatusCode
+			result.StatusCode = statusCode
 		}
 		fetchErr = fmt.Errorf("fetch error: %w", err)
+		logger.Debug("static fetch error", "status", statusCode, "error", err)
 	})
 
 	// Perform the request
+	logger.Debug("static fetch visiting URL", "url", targetURL)
 	if err := c.Visit(targetURL); err != nil {
+		logger.Debug("static fetch visit failed", "url", targetURL, "error", err)
 		return result, fmt.Errorf("failed to visit URL: %w", err)
 	}
 
@@ -83,11 +98,18 @@ func (f *StaticFetcher) Fetch(ctx context.Context, targetURL string, opts FetchO
 
 	// Parse HTML and extract content
 	if result.HTML != "" {
+		logger.Debug("static fetch parsing content", "html_size", len(result.HTML))
 		if err := f.parseContent(&result); err != nil {
+			logger.Debug("static fetch parse failed", "error", err)
 			return result, fmt.Errorf("failed to parse content: %w", err)
 		}
+		logger.Debug("static fetch parse complete",
+			"title", result.Title,
+			"text_size", len(result.Text),
+			"links_count", len(result.Links))
 	}
 
+	logger.Debug("static fetch complete", "url", targetURL)
 	return result, nil
 }
 

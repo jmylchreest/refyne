@@ -54,7 +54,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to create refyne: %v", err)
 	}
-	defer r.Close()
+	defer func() { _ = r.Close() }()
 
 	fmt.Printf("Extracting recipe from: %s\n", url)
 

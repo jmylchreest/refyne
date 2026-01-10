@@ -45,7 +45,7 @@ type ollamaRequest struct {
 	Messages []ollamaMessage `json:"messages"`
 	Format   json.RawMessage `json:"format,omitempty"`
 	Stream   bool            `json:"stream"`
-	Options  ollamaOptions   `json:"options,omitempty"`
+	Options  ollamaOptions   `json:"options"`
 }
 
 type ollamaMessage struct {
@@ -109,7 +109,7 @@ func (p *OllamaProvider) Complete(ctx context.Context, req CompletionRequest) (C
 	if err != nil {
 		return CompletionResponse{}, fmt.Errorf("ollama request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)

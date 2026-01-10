@@ -1,0 +1,93 @@
+name: ZooplaListing
+description: |
+  A Zoopla UK property listing page. Extract property details including
+  price, bedrooms, bathrooms, reception rooms, square footage, address,
+  and UK-specific fields like tenure and chain status.
+
+fields:
+  - name: title
+    type: string
+    description: "Property title or headline from the listing"
+    required: true
+
+  - name: price
+    type: integer
+    description: "Listing price in GBP (numeric value only, no currency symbol)"
+    required: true
+
+  - name: price_qualifier
+    type: string
+    description: "Price qualifier such as 'Guide price', 'Offers over', 'Offers in region of', or empty if none"
+
+  - name: address
+    type: string
+    description: "Full property address including postcode"
+    required: true
+
+  - name: bedrooms
+    type: integer
+    description: "Number of bedrooms"
+
+  - name: bathrooms
+    type: integer
+    description: "Number of bathrooms"
+
+  - name: receptions
+    type: integer
+    description: "Number of reception rooms (living rooms, dining rooms)"
+
+  - name: square_feet
+    type: integer
+    description: "Property size in square feet if available"
+
+  - name: property_type
+    type: string
+    description: "Type of property: detached, semi-detached, terraced, flat, bungalow, etc."
+
+  - name: tenure
+    type: string
+    description: "Property tenure: Freehold, Leasehold, Share of Freehold"
+
+  - name: chain_status
+    type: string
+    description: "Chain status if mentioned: Chain free, No onward chain, etc."
+
+  - name: status
+    type: string
+    description: "Listing status: New, Reduced, Under offer, Sold STC, etc."
+
+  - name: description
+    type: string
+    description: "Full property description text"
+
+  - name: features
+    type: array
+    description: "Key features of the property (garden, parking, garage, etc.)"
+    items:
+      type: string
+
+  - name: images
+    type: array
+    description: "URLs of property photos"
+    items:
+      type: string
+
+  - name: agent_name
+    type: string
+    description: "Estate agent name"
+
+  - name: agent_phone
+    type: string
+    description: "Estate agent phone number if displayed"
+
+  - name: epc_rating
+    type: string
+    description: "Energy Performance Certificate rating (A-G) if shown"
+
+  - name: council_tax_band
+    type: string
+    description: "Council tax band (A-H) if shown"
+
+  - name: url
+    type: string
+    description: "Full URL of the property listing"

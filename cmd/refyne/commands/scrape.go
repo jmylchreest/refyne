@@ -10,6 +10,8 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/refyne/refyne/internal/llm"
+	"github.com/refyne/refyne/internal/logger"
 	"github.com/refyne/refyne/internal/output"
 	"github.com/refyne/refyne/internal/scraper"
 	"github.com/refyne/refyne/pkg/refyne"
@@ -48,7 +50,7 @@ func init() {
 	flags.StringP("schema", "s", "", "path to schema file (required)")
 
 	// LLM settings
-	flags.StringP("provider", "p", "anthropic", "LLM provider: anthropic, openai, openrouter, ollama")
+	flags.StringP("provider", "p", "", "LLM provider: anthropic, openai, openrouter, ollama (auto-detects from env vars)")
 	flags.StringP("model", "m", "", "model name (provider-specific)")
 	flags.StringP("api-key", "k", "", "API key (or use env var)")
 	flags.String("base-url", "", "custom API base URL")
@@ -70,52 +72,93 @@ func init() {
 	flags.String("next", "", "CSS selector for pagination next link")
 	flags.Int("max-depth", 1, "max link depth (0=seed only)")
 	flags.Int("max-pages", 0, "max pagination pages (0=unlimited)")
+	flags.Int("max-urls", 0, "max total URLs to process (0=unlimited)")
 	flags.Duration("delay", 500*time.Millisecond, "delay between requests")
 	flags.IntP("concurrency", "c", 1, "concurrent requests")
 
 	// Required flags
-	scrapeCmd.MarkFlagRequired("schema")
+	_ = scrapeCmd.MarkFlagRequired("schema")
 
 	// Bind to viper
-	viper.BindPFlag("provider", flags.Lookup("provider"))
-	viper.BindPFlag("model", flags.Lookup("model"))
-	viper.BindPFlag("api_key", flags.Lookup("api-key"))
-	viper.BindPFlag("base_url", flags.Lookup("base-url"))
+	_ = viper.BindPFlag("provider", flags.Lookup("provider"))
+	_ = viper.BindPFlag("model", flags.Lookup("model"))
+	_ = viper.BindPFlag("api_key", flags.Lookup("api-key"))
+	_ = viper.BindPFlag("base_url", flags.Lookup("base-url"))
 }
 
 func runScrape(cmd *cobra.Command, args []string) error {
+	// Initialize logger based on flags
+	logger.Init(logger.Options{
+		Debug: viper.GetBool("debug"),
+		Quiet: viper.GetBool("quiet"),
+	})
+
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
+
+	logger.Debug("scrape command starting")
 
 	// Get URLs
 	urls, _ := cmd.Flags().GetStringSlice("url")
 	if len(urls) == 0 {
 		return cmd.Help()
 	}
+	logger.Debug("URLs to process", "count", len(urls), "urls", urls)
 
 	// Load schema
 	schemaPath, _ := cmd.Flags().GetString("schema")
+	logger.Debug("loading schema", "path", schemaPath)
 	s, err := schema.FromFile(schemaPath)
 	if err != nil {
 		logError("failed to load schema: %v", err)
 		return err
 	}
+	logger.Debug("schema loaded", "name", s.Name, "fields", len(s.Fields))
 
 	// Get fetch mode
 	fetchModeStr, _ := cmd.Flags().GetString("fetch-mode")
 	fetchMode := scraper.FetchMode(fetchModeStr)
+	logger.Debug("fetch mode", "mode", fetchModeStr)
 
 	// Get timeout
 	timeout, _ := cmd.Flags().GetDuration("timeout")
+	logger.Debug("timeout", "duration", timeout)
 
 	// Get max retries
 	maxRetries, _ := cmd.Flags().GetInt("max-retries")
+	logger.Debug("max retries", "retries", maxRetries)
 
-	// Create refyne instance
+	// Determine provider and model
+	// Priority: explicit flags > viper config > auto-detection
+	provider := viper.GetString("provider")
+	model := viper.GetString("model")
+	apiKey := viper.GetString("api_key")
+
+	// Auto-detect provider if not explicitly set
+	if provider == "" {
+		detectedProvider, detectedKey := llm.DetectProvider()
+		provider = detectedProvider
+		if apiKey == "" {
+			apiKey = detectedKey
+		}
+		logger.Debug("auto-detected provider", "provider", provider)
+	}
+
+	// Use default model for provider if not explicitly set
+	if model == "" {
+		model = llm.GetDefaultModel(provider)
+		logger.Debug("using default model", "model", model)
+	}
+
+	logger.Debug("creating refyne instance",
+		"provider", provider,
+		"model", model,
+		"has_api_key", apiKey != "")
+
 	r, err := refyne.New(
-		refyne.WithProvider(viper.GetString("provider")),
-		refyne.WithModel(viper.GetString("model")),
-		refyne.WithAPIKey(viper.GetString("api_key")),
+		refyne.WithProvider(provider),
+		refyne.WithModel(model),
+		refyne.WithAPIKey(apiKey),
 		refyne.WithBaseURL(viper.GetString("base_url")),
 		refyne.WithFetchMode(fetchMode),
 		refyne.WithTimeout(timeout),
@@ -125,17 +168,18 @@ func runScrape(cmd *cobra.Command, args []string) error {
 		logError("failed to initialize: %v", err)
 		return err
 	}
-	defer r.Close()
+	defer func() { _ = r.Close() }()
+	logger.Debug("refyne instance created")
 
 	// Setup output
 	outFile := os.Stdout
 	if outPath, _ := cmd.Flags().GetString("output"); outPath != "" {
-		f, err := os.Create(outPath)
+		f, err := os.Create(outPath) //#nosec G304 -- CLI tool writes to user-specified output file
 		if err != nil {
 			logError("failed to create output file: %v", err)
 			return err
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 		outFile = f
 	}
 
@@ -145,7 +189,7 @@ func runScrape(cmd *cobra.Command, args []string) error {
 		logError("failed to create output writer: %v", err)
 		return err
 	}
-	defer writer.Close()
+	defer func() { _ = writer.Close() }()
 
 	// Get crawling options
 	followSelector, _ := cmd.Flags().GetString("follow")
@@ -153,6 +197,7 @@ func runScrape(cmd *cobra.Command, args []string) error {
 	nextSelector, _ := cmd.Flags().GetString("next")
 	maxDepth, _ := cmd.Flags().GetInt("max-depth")
 	maxPages, _ := cmd.Flags().GetInt("max-pages")
+	maxURLs, _ := cmd.Flags().GetInt("max-urls")
 	delay, _ := cmd.Flags().GetDuration("delay")
 	concurrency, _ := cmd.Flags().GetInt("concurrency")
 
@@ -182,6 +227,9 @@ func runScrape(cmd *cobra.Command, args []string) error {
 		}
 		if maxPages > 0 {
 			crawlOpts = append(crawlOpts, refyne.WithMaxPages(maxPages))
+		}
+		if maxURLs > 0 {
+			crawlOpts = append(crawlOpts, refyne.WithMaxURLs(maxURLs))
 		}
 
 		results := r.CrawlMany(ctx, urls, s, crawlOpts...)
@@ -228,11 +276,6 @@ func runScrape(cmd *cobra.Command, args []string) error {
 		}
 
 		logInfo("Completed: %d items extracted", count)
-	}
-
-	if err := writer.Flush(); err != nil {
-		logError("failed to flush output: %v", err)
-		return err
 	}
 
 	if hasErrors {

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/refyne/refyne/internal/llm"
+	"github.com/refyne/refyne/internal/logger"
 	"github.com/refyne/refyne/pkg/schema"
 )
 
@@ -87,46 +88,73 @@ func WithDebugMode(enabled bool) Option {
 
 // Extract performs LLM-based data extraction from content.
 func (e *Extractor) Extract(ctx context.Context, content string, s schema.Schema) (ExtractionResult, error) {
+	logger.Debug("extractor starting",
+		"schema", s.Name,
+		"content_size", len(content),
+		"max_retries", e.config.MaxRetries)
+
 	var lastErr error
 	var totalUsage llm.Usage
 
 	for attempt := 0; attempt <= e.config.MaxRetries; attempt++ {
+		logger.Debug("extractor attempt", "attempt", attempt+1, "max_attempts", e.config.MaxRetries+1)
+
 		result, err := e.extractOnce(ctx, content, s, lastErr)
 
 		// Accumulate token usage across attempts
 		totalUsage.InputTokens += result.Usage.InputTokens
 		totalUsage.OutputTokens += result.Usage.OutputTokens
 
+		logger.Debug("extractor attempt complete",
+			"attempt", attempt+1,
+			"input_tokens", result.Usage.InputTokens,
+			"output_tokens", result.Usage.OutputTokens,
+			"error", err)
+
 		if err == nil {
 			// Validate the result
 			validationErrors := s.Validate(result.Data)
+			logger.Debug("extractor validation complete",
+				"validation_errors", len(validationErrors))
+
 			if len(validationErrors) == 0 {
 				result.Usage = totalUsage
 				result.RetryCount = attempt
+				logger.Debug("extractor success",
+					"total_attempts", attempt+1,
+					"total_input_tokens", totalUsage.InputTokens,
+					"total_output_tokens", totalUsage.OutputTokens)
 				return result, nil
 			}
 
 			// Validation failed - retry with error context
 			lastErr = &validationErrorWrapper{errors: validationErrors}
 			result.Errors = validationErrors
+			logger.Debug("extractor validation failed, will retry",
+				"errors", validationErrors)
 		} else {
 			lastErr = err
 		}
 
 		// Check if we should retry
 		if attempt >= e.config.MaxRetries {
+			logger.Debug("extractor max retries reached", "max_retries", e.config.MaxRetries)
 			break
 		}
 
 		if !isRetryable(err) && lastErr != nil {
 			// If we have validation errors, those are retryable
 			if _, ok := lastErr.(*validationErrorWrapper); !ok {
+				logger.Debug("extractor error not retryable", "error", lastErr)
 				break
 			}
 		}
 	}
 
 	// Return last result with errors
+	logger.Debug("extractor failed",
+		"attempts", e.config.MaxRetries+1,
+		"error", lastErr)
 	return ExtractionResult{
 		Usage:      totalUsage,
 		RetryCount: e.config.MaxRetries,
@@ -135,12 +163,23 @@ func (e *Extractor) Extract(ctx context.Context, content string, s schema.Schema
 
 // extractOnce performs a single extraction attempt.
 func (e *Extractor) extractOnce(ctx context.Context, content string, s schema.Schema, previousErr error) (ExtractionResult, error) {
+	logger.Debug("extractor building prompt",
+		"has_previous_error", previousErr != nil)
+
 	prompt := BuildExtractionPrompt(content, s, previousErr)
+	logger.Debug("extractor prompt built", "prompt_size", len(prompt))
 
 	jsonSchema, err := s.ToJSONSchema()
 	if err != nil {
+		logger.Debug("extractor JSON schema generation failed", "error", err)
 		return ExtractionResult{}, fmt.Errorf("failed to generate JSON schema: %w", err)
 	}
+	logger.Debug("extractor JSON schema generated")
+
+	logger.Debug("extractor calling LLM",
+		"provider", e.provider.Name(),
+		"max_tokens", e.config.MaxTokens,
+		"temperature", e.config.Temperature)
 
 	resp, err := e.provider.Complete(ctx, llm.CompletionRequest{
 		Messages: []llm.Message{
@@ -152,18 +191,25 @@ func (e *Extractor) extractOnce(ctx context.Context, content string, s schema.Sc
 		JSONSchema:  jsonSchema,
 	})
 	if err != nil {
+		logger.Debug("extractor LLM completion failed", "error", err)
 		return ExtractionResult{Usage: llm.Usage{}}, fmt.Errorf("LLM completion failed: %w", err)
 	}
+	logger.Debug("extractor LLM response received",
+		"response_size", len(resp.Content),
+		"input_tokens", resp.Usage.InputTokens,
+		"output_tokens", resp.Usage.OutputTokens)
 
 	// Parse response
 	data, err := s.Unmarshal([]byte(resp.Content))
 	if err != nil {
+		logger.Debug("extractor failed to parse response", "error", err)
 		return ExtractionResult{
 			Raw:   resp.Content,
 			Usage: resp.Usage,
 		}, fmt.Errorf("failed to parse response as JSON: %w (response: %s)", err, truncateForError(resp.Content))
 	}
 
+	logger.Debug("extractor response parsed successfully")
 	return ExtractionResult{
 		Data:  data,
 		Raw:   resp.Content,

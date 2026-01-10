@@ -42,8 +42,8 @@ func init() {
 	rootCmd.PersistentFlags().Bool("debug", false, "enable debug logging")
 	rootCmd.PersistentFlags().BoolP("quiet", "q", false, "suppress progress output")
 
-	viper.BindPFlag("debug", rootCmd.PersistentFlags().Lookup("debug"))
-	viper.BindPFlag("quiet", rootCmd.PersistentFlags().Lookup("quiet"))
+	_ = viper.BindPFlag("debug", rootCmd.PersistentFlags().Lookup("debug"))
+	_ = viper.BindPFlag("quiet", rootCmd.PersistentFlags().Lookup("quiet"))
 }
 
 func initConfig() {
@@ -64,10 +64,10 @@ func initConfig() {
 	viper.AutomaticEnv()
 
 	// Also check common API key env vars
-	viper.BindEnv("api_key", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY")
+	_ = viper.BindEnv("api_key", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY")
 
 	// Read config file (ignore error if not found)
-	viper.ReadInConfig()
+	_ = viper.ReadInConfig()
 }
 
 // Execute runs the root command.

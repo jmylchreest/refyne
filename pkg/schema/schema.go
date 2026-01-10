@@ -68,7 +68,7 @@ func NewSchema[T any](opts ...SchemaOption) (Schema, error) {
 
 // FromFile loads a schema from a JSON or YAML file.
 func FromFile(path string) (Schema, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //#nosec G304 -- CLI tool reads user-specified schema files
 	if err != nil {
 		return Schema{}, fmt.Errorf("failed to read schema file: %w", err)
 	}

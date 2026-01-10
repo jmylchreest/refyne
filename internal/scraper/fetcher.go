@@ -35,10 +35,13 @@ type Cookie struct {
 	Domain string
 }
 
+// Chrome user agent for better compatibility with bot-protected sites
+const defaultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
 // DefaultFetchOptions returns sensible defaults.
 func DefaultFetchOptions() FetchOptions {
 	return FetchOptions{
-		UserAgent: "refyne/1.0 (https://github.com/refyne/refyne)",
+		UserAgent: defaultUserAgent,
 		Timeout:   30 * time.Second,
 	}
 }
@@ -64,7 +67,7 @@ type FetcherConfig struct {
 // DefaultFetcherConfig returns sensible defaults.
 func DefaultFetcherConfig() FetcherConfig {
 	return FetcherConfig{
-		UserAgent: "refyne/1.0 (https://github.com/refyne/refyne)",
+		UserAgent: defaultUserAgent,
 		Timeout:   30 * time.Second,
 	}
 }

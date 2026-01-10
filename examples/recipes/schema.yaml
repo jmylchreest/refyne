@@ -1,0 +1,51 @@
+name: Recipe
+description: |
+  A cooking recipe page. Extract the recipe title, description, timing,
+  ingredients list, and step-by-step cooking instructions.
+
+fields:
+  - name: title
+    type: string
+    description: "The name of the recipe"
+    required: true
+
+  - name: description
+    type: string
+    description: "Brief description of the dish"
+
+  - name: prep_time
+    type: string
+    description: "Preparation time (e.g., '15 minutes')"
+
+  - name: cook_time
+    type: string
+    description: "Cooking time (e.g., '30 minutes')"
+
+  - name: servings
+    type: integer
+    description: "Number of servings"
+
+  - name: ingredients
+    type: array
+    description: "List of ingredients needed"
+    required: true
+    items:
+      type: object
+      properties:
+        - name: name
+          type: string
+          description: "Ingredient name"
+          required: true
+        - name: amount
+          type: string
+          description: "Quantity (e.g., '2 cups', '1 tablespoon')"
+        - name: notes
+          type: string
+          description: "Additional notes (e.g., 'finely chopped')"
+
+  - name: steps
+    type: array
+    description: "Step-by-step cooking instructions"
+    required: true
+    items:
+      type: string

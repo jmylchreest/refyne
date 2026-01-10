@@ -9,6 +9,7 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/chromedp/chromedp"
+	"github.com/refyne/refyne/internal/logger"
 )
 
 // DynamicFetcher uses chromedp for JavaScript-rendered pages.
@@ -20,6 +21,8 @@ type DynamicFetcher struct {
 
 // NewDynamicFetcher creates a new dynamic fetcher with a browser instance.
 func NewDynamicFetcher(cfg FetcherConfig) (*DynamicFetcher, error) {
+	logger.Debug("creating dynamic fetcher")
+
 	if cfg.UserAgent == "" {
 		cfg.UserAgent = DefaultFetcherConfig().UserAgent
 	}
@@ -28,15 +31,28 @@ func NewDynamicFetcher(cfg FetcherConfig) (*DynamicFetcher, error) {
 	}
 
 	// Create browser allocator with options
+	// Include stealth options to avoid bot detection
 	opts := append(chromedp.DefaultExecAllocatorOptions[:],
 		chromedp.Flag("headless", true),
 		chromedp.Flag("disable-gpu", true),
 		chromedp.Flag("no-sandbox", true),
 		chromedp.Flag("disable-dev-shm-usage", true),
+		chromedp.Flag("disable-blink-features", "AutomationControlled"),
+		chromedp.Flag("disable-features", "IsolateOrigins,site-per-process"),
+		chromedp.Flag("disable-web-security", true),
+		chromedp.Flag("allow-running-insecure-content", true),
 		chromedp.UserAgent(cfg.UserAgent),
+		// Window size to look like a real browser
+		chromedp.WindowSize(1920, 1080),
 	)
 
+	logger.Debug("dynamic fetcher browser options configured",
+		"user_agent", cfg.UserAgent,
+		"timeout", cfg.Timeout)
+
 	allocCtx, cancelAlloc := chromedp.NewExecAllocator(context.Background(), opts...)
+
+	logger.Debug("dynamic fetcher browser allocator created")
 
 	return &DynamicFetcher{
 		config:    cfg,
@@ -47,12 +63,15 @@ func NewDynamicFetcher(cfg FetcherConfig) (*DynamicFetcher, error) {
 
 // Fetch retrieves page content using a headless browser.
 func (f *DynamicFetcher) Fetch(ctx context.Context, targetURL string, opts FetchOptions) (PageContent, error) {
+	logger.Debug("dynamic fetch starting", "url", targetURL)
+
 	result := PageContent{
 		URL:       targetURL,
 		FetchedAt: time.Now(),
 	}
 
 	// Create a new browser context for this request
+	logger.Debug("dynamic fetch creating browser context")
 	browserCtx, cancelBrowser := chromedp.NewContext(f.allocCtx)
 	defer cancelBrowser()
 
@@ -61,6 +80,7 @@ func (f *DynamicFetcher) Fetch(ctx context.Context, targetURL string, opts Fetch
 	if timeout == 0 {
 		timeout = f.config.Timeout
 	}
+	logger.Debug("dynamic fetch timeout set", "timeout", timeout)
 
 	timeoutCtx, cancelTimeout := context.WithTimeout(browserCtx, timeout)
 	defer cancelTimeout()
@@ -72,18 +92,23 @@ func (f *DynamicFetcher) Fetch(ctx context.Context, targetURL string, opts Fetch
 	actions := []chromedp.Action{
 		chromedp.Navigate(targetURL),
 	}
+	logger.Debug("dynamic fetch navigating", "url", targetURL)
 
 	// Wait for selector if specified
+	waitSelector := "body"
 	if opts.WaitForSelector != "" {
+		waitSelector = opts.WaitForSelector
 		actions = append(actions, chromedp.WaitVisible(opts.WaitForSelector))
 	} else {
 		// Default: wait for body to be visible
 		actions = append(actions, chromedp.WaitVisible("body"))
 	}
+	logger.Debug("dynamic fetch waiting for selector", "selector", waitSelector)
 
 	// Additional wait if specified
 	if opts.WaitDuration > 0 {
 		actions = append(actions, chromedp.Sleep(opts.WaitDuration))
+		logger.Debug("dynamic fetch additional wait", "duration", opts.WaitDuration)
 	}
 
 	// Extract content
@@ -93,19 +118,28 @@ func (f *DynamicFetcher) Fetch(ctx context.Context, targetURL string, opts Fetch
 	)
 
 	// Execute actions
+	logger.Debug("dynamic fetch executing browser actions", "action_count", len(actions))
 	if err := chromedp.Run(timeoutCtx, actions...); err != nil {
+		logger.Debug("dynamic fetch browser automation failed", "url", targetURL, "error", err)
 		return result, fmt.Errorf("browser automation failed: %w", err)
 	}
+	logger.Debug("dynamic fetch browser actions complete", "html_size", len(html), "title", title)
 
 	result.HTML = html
 	result.Title = title
 	result.StatusCode = 200 // chromedp doesn't easily expose status codes
 
 	// Parse content
+	logger.Debug("dynamic fetch parsing content")
 	if err := f.parseContent(&result); err != nil {
+		logger.Debug("dynamic fetch parse failed", "error", err)
 		return result, fmt.Errorf("failed to parse content: %w", err)
 	}
+	logger.Debug("dynamic fetch parse complete",
+		"text_size", len(result.Text),
+		"links_count", len(result.Links))
 
+	logger.Debug("dynamic fetch complete", "url", targetURL)
 	return result, nil
 }
 

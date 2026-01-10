@@ -55,7 +55,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to create refyne: %v", err)
 	}
-	defer r.Close()
+	defer func() { _ = r.Close() }()
 
 	fmt.Printf("Crawling from: %s\n", searchURL)
 	fmt.Printf("Following links matching: %s\n", linkSelector)

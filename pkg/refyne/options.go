@@ -29,12 +29,15 @@ type Config struct {
 	CrawlConfig crawler.Config
 }
 
+// Chrome user agent for better compatibility with bot-protected sites
+const defaultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
 // DefaultConfig returns sensible defaults.
 func DefaultConfig() Config {
 	return Config{
 		Provider:    "anthropic",
 		FetchMode:   scraper.FetchModeAuto,
-		UserAgent:   "refyne/1.0 (https://github.com/refyne/refyne)",
+		UserAgent:   defaultUserAgent,
 		Timeout:     30 * time.Second,
 		MaxRetries:  3,
 		Temperature: 0.1,
@@ -139,10 +142,17 @@ func WithNextSelector(selector string) CrawlOption {
 	}
 }
 
-// WithMaxPages sets the maximum pages to crawl.
+// WithMaxPages sets the maximum pagination pages to crawl.
 func WithMaxPages(n int) CrawlOption {
 	return func(c *crawler.Config) {
 		c.MaxPages = n
+	}
+}
+
+// WithMaxURLs sets the maximum total URLs to process.
+func WithMaxURLs(n int) CrawlOption {
+	return func(c *crawler.Config) {
+		c.MaxURLs = n
 	}
 }
 

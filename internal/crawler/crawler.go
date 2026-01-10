@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/refyne/refyne/internal/extractor"
+	"github.com/refyne/refyne/internal/logger"
 	"github.com/refyne/refyne/internal/scraper"
 	"github.com/refyne/refyne/pkg/schema"
 )
@@ -35,6 +36,9 @@ type Config struct {
 	NextSelector string // CSS selector for "next page" link
 	MaxPages     int    // Max pages to crawl (0 = unlimited)
 
+	// Limits
+	MaxURLs int // Max total URLs to process (0 = unlimited)
+
 	// Rate limiting
 	Delay       time.Duration // Delay between requests
 	Concurrency int           // Max concurrent requests
@@ -49,6 +53,7 @@ func DefaultConfig() Config {
 		SameDomainOnly:   true,
 		MaxDepth:         1,
 		MaxPages:         0, // unlimited
+		MaxURLs:          0, // unlimited
 		Delay:            500 * time.Millisecond,
 		Concurrency:      1,
 		ExtractFromSeeds: false,
@@ -87,15 +92,26 @@ func (c *Crawler) Crawl(ctx context.Context, seeds []string, s schema.Schema) <-
 }
 
 func (c *Crawler) crawl(ctx context.Context, seeds []string, s schema.Schema, results chan<- Result) {
+	logger.Debug("crawler starting",
+		"seeds", len(seeds),
+		"max_depth", c.config.MaxDepth,
+		"max_urls", c.config.MaxURLs,
+		"concurrency", c.config.Concurrency,
+		"delay", c.config.Delay)
+
 	queue := NewURLQueue()
 	var linkSelector *LinkSelector
 	var paginationSelector *PaginationSelector
 
 	// Setup link selector if configured
 	if c.config.FollowSelector != "" || c.config.FollowPattern != "" {
+		logger.Debug("crawler setting up link selector",
+			"css_selector", c.config.FollowSelector,
+			"pattern", c.config.FollowPattern)
 		var err error
 		linkSelector, err = NewLinkSelector(c.config.FollowSelector, c.config.FollowPattern)
 		if err != nil {
+			logger.Debug("crawler invalid link selector", "error", err)
 			results <- Result{Error: fmt.Errorf("invalid link selector: %w", err)}
 			return
 		}
@@ -103,16 +119,19 @@ func (c *Crawler) crawl(ctx context.Context, seeds []string, s schema.Schema, re
 
 	// Setup pagination selector if configured
 	if c.config.NextSelector != "" {
+		logger.Debug("crawler setting up pagination selector", "selector", c.config.NextSelector)
 		paginationSelector = NewPaginationSelector(c.config.NextSelector)
 	}
 
 	// Add seed URLs to queue at depth 0
 	for _, seed := range seeds {
+		logger.Debug("crawler adding seed URL", "url", seed)
 		queue.Add(seed, 0)
 	}
 
-	// Track pagination pages
-	pagesProcessed := 0
+	// Track processed URLs
+	urlsProcessed := 0
+	paginationPages := 0
 
 	// Semaphore for concurrency control
 	sem := make(chan struct{}, c.config.Concurrency)
@@ -124,6 +143,13 @@ func (c *Crawler) crawl(ctx context.Context, seeds []string, s schema.Schema, re
 			wg.Wait()
 			return
 		default:
+		}
+
+		// Check max URLs limit
+		if c.config.MaxURLs > 0 && urlsProcessed >= c.config.MaxURLs {
+			logger.Debug("crawler reached max URLs limit", "max_urls", c.config.MaxURLs)
+			wg.Wait()
+			return
 		}
 
 		// Get next URL
@@ -138,8 +164,9 @@ func (c *Crawler) crawl(ctx context.Context, seeds []string, s schema.Schema, re
 			continue
 		}
 
-		// Check max pages for pagination
-		if c.config.MaxPages > 0 && pagesProcessed >= c.config.MaxPages {
+		// Check max pages for pagination (depth 0 pages only)
+		if depth == 0 && c.config.MaxPages > 0 && paginationPages >= c.config.MaxPages {
+			logger.Debug("crawler reached max pagination pages", "max_pages", c.config.MaxPages)
 			continue
 		}
 
@@ -159,7 +186,10 @@ func (c *Crawler) crawl(ctx context.Context, seeds []string, s schema.Schema, re
 			c.processURL(ctx, url, d, s, queue, linkSelector, paginationSelector, results)
 		}(currentURL, depth)
 
-		pagesProcessed++
+		urlsProcessed++
+		if depth == 0 {
+			paginationPages++
+		}
 	}
 }
 
@@ -173,12 +203,19 @@ func (c *Crawler) processURL(
 	paginationSelector *PaginationSelector,
 	results chan<- Result,
 ) {
+	logger.Debug("crawler processing URL", "url", url, "depth", depth)
+
 	// Fetch the page
 	content, err := c.fetcher.Fetch(ctx, url, scraper.DefaultFetchOptions())
 	if err != nil {
+		logger.Debug("crawler fetch error", "url", url, "error", err)
 		results <- Result{URL: url, Depth: depth, Error: fmt.Errorf("fetch error: %w", err)}
 		return
 	}
+	logger.Debug("crawler fetch complete",
+		"url", url,
+		"text_size", len(content.Text),
+		"links_count", len(content.Links))
 
 	// Check if we should extract from this page
 	shouldExtract := false
@@ -195,8 +232,10 @@ func (c *Crawler) processURL(
 
 	// Extract data if appropriate
 	if shouldExtract {
+		logger.Debug("crawler extracting data", "url", url)
 		extractResult, err := c.extractor.Extract(ctx, content.Text, s)
 		if err != nil {
+			logger.Debug("crawler extraction error", "url", url, "error", err)
 			results <- Result{
 				URL:       url,
 				Depth:     depth,
@@ -204,6 +243,9 @@ func (c *Crawler) processURL(
 				FetchedAt: content.FetchedAt,
 			}
 		} else {
+			logger.Debug("crawler extraction complete",
+				"url", url,
+				"validation_errors", len(extractResult.Errors))
 			results <- Result{
 				URL:       url,
 				Depth:     depth,
@@ -214,27 +256,36 @@ func (c *Crawler) processURL(
 				FetchedAt: content.FetchedAt,
 			}
 		}
+	} else {
+		logger.Debug("crawler skipping extraction", "url", url, "depth", depth)
 	}
 
 	// Follow links if configured and within depth limit
 	if linkSelector != nil && depth < c.config.MaxDepth {
 		links, err := linkSelector.ExtractLinks(content.HTML, url)
 		if err == nil {
+			logger.Debug("crawler found links to follow", "url", url, "links_count", len(links))
 			for _, link := range links {
 				// Check same domain constraint
 				if c.config.SameDomainOnly && !IsSameDomain(url, link) {
+					logger.Debug("crawler skipping cross-domain link", "link", link)
 					continue
 				}
 				queue.Add(link, depth+1)
 			}
+		} else {
+			logger.Debug("crawler link extraction failed", "url", url, "error", err)
 		}
 	}
 
 	// Handle pagination (only at depth 0)
 	if paginationSelector != nil && depth == 0 {
 		if nextURL, found := paginationSelector.FindNextPage(content.HTML, url); found {
+			logger.Debug("crawler found next page", "next_url", nextURL)
 			// Pagination stays at depth 0
 			queue.Add(nextURL, 0)
 		}
 	}
+
+	logger.Debug("crawler finished processing URL", "url", url)
 }

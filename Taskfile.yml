@@ -83,11 +83,62 @@ tasks:
       - go run ./cmd/refyne {{.CLI_ARGS}}
 
   example:recipes:
-    desc: Run the recipes example
+    desc: Run the recipes example (Go code)
     cmds:
       - go run ./examples/recipes {{.CLI_ARGS}}
 
   example:realestate:
-    desc: Run the real estate example
+    desc: Run the real estate example (Go code)
     cmds:
       - go run ./examples/realestate {{.CLI_ARGS}}
+
+  example:recipes:cli:
+    desc: Extract a recipe using CLI (pass URL as argument)
+    dir: examples/recipes
+    cmds:
+      - go run ../../cmd/refyne scrape -u "{{.CLI_ARGS}}" -s schema.yaml --debug
+
+  example:realestate:cli:
+    desc: Extract property listing using CLI (pass URL as argument)
+    dir: examples/realestate
+    cmds:
+      - go run ../../cmd/refyne scrape -u "{{.CLI_ARGS}}" -s schema.yaml --debug
+
+  example:realestate:crawl:
+    desc: Crawl property listings (pass URL and link selector)
+    dir: examples/realestate
+    vars:
+      URL: '{{index (splitArgs .CLI_ARGS) 0 | default "https://example.com"}}'
+      SELECTOR: '{{index (splitArgs .CLI_ARGS) 1 | default "a.listing"}}'
+    cmds:
+      - go run ../../cmd/refyne scrape -u "{{.URL}}" -s schema.yaml --follow "{{.SELECTOR}}" --max-depth 1 --debug
+
+  example:simple:
+    desc: Extract basic info from any webpage (pass URL as argument)
+    dir: examples/simple
+    cmds:
+      - go run ../../cmd/refyne scrape -u "{{.CLI_ARGS}}" -s schema.yaml --debug
+
+  example:zoopla:cli:
+    desc: Extract Zoopla property listing using CLI (pass URL as argument)
+    dir: examples/zoopla
+    cmds:
+      - go run ../../cmd/refyne scrape -u {{.CLI_ARGS}} -s schema.yaml --timeout 60s --debug
+
+  example:zoopla:crawl:
+    desc: Crawl Zoopla search results (pass search URL as argument)
+    dir: examples/zoopla
+    cmds:
+      - go run ../../cmd/refyne scrape -u {{.CLI_ARGS}} -s schema.yaml --follow "a[href*='/for-sale/details/']" --max-depth 1 --delay 2s --timeout 60s --debug
+
+  example:simplyrecipes:cli:
+    desc: Extract a Simply Recipes recipe (pass URL as argument)
+    dir: examples/simplyrecipes
+    cmds:
+      - go run ../../cmd/refyne scrape -u {{.CLI_ARGS}} -s schema.yaml --fetch-mode static --debug
+
+  example:simplyrecipes:crawl:
+    desc: Crawl Simply Recipes list page (pass URL as argument)
+    dir: examples/simplyrecipes
+    cmds:
+      - go run ../../cmd/refyne scrape -u {{.CLI_ARGS}} -s schema.yaml --follow "a[href*='-recipe-']" --max-depth 1 --delay 1s --fetch-mode static --debug

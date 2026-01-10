@@ -1,0 +1,75 @@
+name: Recipe
+description: |
+  A recipe page from Simply Recipes. Extract the recipe title, description,
+  timing information, ingredients list, and step-by-step instructions.
+  Ingredients should include the amount and any notes (like "softened" or "chopped").
+
+fields:
+  - name: title
+    type: string
+    description: "Recipe name/title"
+    required: true
+
+  - name: description
+    type: string
+    description: "Brief description or introduction to the recipe"
+
+  - name: author
+    type: string
+    description: "Recipe author name"
+
+  - name: prep_time
+    type: string
+    description: "Preparation time (e.g., '20 minutes')"
+
+  - name: cook_time
+    type: string
+    description: "Cooking/baking time (e.g., '30 minutes')"
+
+  - name: total_time
+    type: string
+    description: "Total time from start to finish"
+
+  - name: servings
+    type: string
+    description: "Number of servings or yield"
+
+  - name: ingredients
+    type: array
+    description: "List of ingredients with amounts"
+    items:
+      type: object
+      properties:
+        amount:
+          type: string
+          description: "Quantity and unit (e.g., '2 cups', '1 tbsp')"
+        name:
+          type: string
+          description: "Ingredient name"
+        notes:
+          type: string
+          description: "Additional notes (e.g., 'softened', 'finely chopped')"
+
+  - name: instructions
+    type: array
+    description: "Step-by-step cooking instructions"
+    items:
+      type: string
+
+  - name: notes
+    type: array
+    description: "Recipe tips, variations, or storage instructions"
+    items:
+      type: string
+
+  - name: category
+    type: string
+    description: "Recipe category (e.g., 'Dinners', 'Desserts', 'Drinks')"
+
+  - name: cuisine
+    type: string
+    description: "Cuisine type if specified (e.g., 'Italian', 'Mexican')"
+
+  - name: image_url
+    type: string
+    description: "URL of the main recipe image"
