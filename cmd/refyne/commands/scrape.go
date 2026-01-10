@@ -235,9 +235,10 @@ func runScrape(cmd *cobra.Command, args []string) error {
 		results := r.CrawlMany(ctx, urls, s, crawlOpts...)
 
 		count := 0
+		errorCount := 0
 		for result := range results {
 			if result.Error != nil {
-				logError("Error processing %s: %v", result.URL, result.Error)
+				errorCount++
 				hasErrors = true
 				continue
 			}
@@ -248,11 +249,10 @@ func runScrape(cmd *cobra.Command, args []string) error {
 					return err
 				}
 				count++
-				logInfo("Extracted: %s (tokens: %d)", result.URL, result.TokenUsage.InputTokens+result.TokenUsage.OutputTokens)
 			}
 		}
 
-		logInfo("Completed: %d items extracted", count)
+		logInfo("Completed: %d extracted, %d errors", count, errorCount)
 	} else {
 		// Simple extraction mode
 		logInfo("Extracting from %d URL(s)...", len(urls))
@@ -260,9 +260,10 @@ func runScrape(cmd *cobra.Command, args []string) error {
 		results := r.ExtractMany(ctx, urls, s, concurrency)
 
 		count := 0
+		errorCount := 0
 		for result := range results {
 			if result.Error != nil {
-				logError("Error processing %s: %v", result.URL, result.Error)
+				errorCount++
 				hasErrors = true
 				continue
 			}
@@ -272,10 +273,9 @@ func runScrape(cmd *cobra.Command, args []string) error {
 				return err
 			}
 			count++
-			logInfo("Extracted: %s (tokens: %d)", result.URL, result.TokenUsage.InputTokens+result.TokenUsage.OutputTokens)
 		}
 
-		logInfo("Completed: %d items extracted", count)
+		logInfo("Completed: %d extracted, %d errors", count, errorCount)
 	}
 
 	if hasErrors {

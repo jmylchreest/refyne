@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/refyne/refyne/internal/llm"
 	"github.com/refyne/refyne/internal/logger"
@@ -12,11 +13,12 @@ import (
 
 // ExtractionResult holds extracted and validated data.
 type ExtractionResult struct {
-	Data       any                      // Extracted structured data
-	Raw        string                   // Raw LLM response
-	Errors     []schema.ValidationError // Validation errors (if any)
-	Usage      llm.Usage                // Token usage
-	RetryCount int                      // Number of retries performed
+	Data        any                      // Extracted structured data
+	Raw         string                   // Raw LLM response
+	Errors      []schema.ValidationError // Validation errors (if any)
+	Usage       llm.Usage                // Token usage
+	RetryCount  int                      // Number of retries performed
+	LLMDuration time.Duration            // Time spent in LLM calls
 }
 
 // Extractor performs LLM-based data extraction.
@@ -95,11 +97,15 @@ func (e *Extractor) Extract(ctx context.Context, content string, s schema.Schema
 
 	var lastErr error
 	var totalUsage llm.Usage
+	var totalLLMDuration time.Duration
 
 	for attempt := 0; attempt <= e.config.MaxRetries; attempt++ {
 		logger.Debug("extractor attempt", "attempt", attempt+1, "max_attempts", e.config.MaxRetries+1)
 
+		llmStart := time.Now()
 		result, err := e.extractOnce(ctx, content, s, lastErr)
+		llmDuration := time.Since(llmStart)
+		totalLLMDuration += llmDuration
 
 		// Accumulate token usage across attempts
 		totalUsage.InputTokens += result.Usage.InputTokens
@@ -120,10 +126,12 @@ func (e *Extractor) Extract(ctx context.Context, content string, s schema.Schema
 			if len(validationErrors) == 0 {
 				result.Usage = totalUsage
 				result.RetryCount = attempt
+				result.LLMDuration = totalLLMDuration
 				logger.Debug("extractor success",
 					"total_attempts", attempt+1,
 					"total_input_tokens", totalUsage.InputTokens,
-					"total_output_tokens", totalUsage.OutputTokens)
+					"total_output_tokens", totalUsage.OutputTokens,
+					"llm_duration", totalLLMDuration)
 				return result, nil
 			}
 
@@ -156,8 +164,9 @@ func (e *Extractor) Extract(ctx context.Context, content string, s schema.Schema
 		"attempts", e.config.MaxRetries+1,
 		"error", lastErr)
 	return ExtractionResult{
-		Usage:      totalUsage,
-		RetryCount: e.config.MaxRetries,
+		Usage:       totalUsage,
+		RetryCount:  e.config.MaxRetries,
+		LLMDuration: totalLLMDuration,
 	}, fmt.Errorf("extraction failed after %d attempts: %w", e.config.MaxRetries+1, lastErr)
 }
 

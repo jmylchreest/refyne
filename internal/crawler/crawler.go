@@ -14,14 +14,16 @@ import (
 
 // Result represents a single crawl/extraction result.
 type Result struct {
-	URL        string
-	Data       any
-	Raw        string
-	Errors     []schema.ValidationError
-	Usage      extractor.ExtractionResult
-	Error      error
-	Depth      int
-	FetchedAt  time.Time
+	URL             string
+	Data            any
+	Raw             string
+	Errors          []schema.ValidationError
+	Usage           extractor.ExtractionResult
+	Error           error
+	Depth           int
+	FetchedAt       time.Time
+	FetchDuration   time.Duration
+	ExtractDuration time.Duration
 }
 
 // Config holds crawler configuration.
@@ -98,6 +100,11 @@ func (c *Crawler) crawl(ctx context.Context, seeds []string, s schema.Schema, re
 		"max_urls", c.config.MaxURLs,
 		"concurrency", c.config.Concurrency,
 		"delay", c.config.Delay)
+
+	// Log seed URLs at Info level
+	for _, seed := range seeds {
+		logger.Info("seed", "url", seed)
+	}
 
 	queue := NewURLQueue()
 	var linkSelector *LinkSelector
@@ -206,10 +213,13 @@ func (c *Crawler) processURL(
 	logger.Debug("crawler processing URL", "url", url, "depth", depth)
 
 	// Fetch the page
+	fetchStart := time.Now()
 	content, err := c.fetcher.Fetch(ctx, url, scraper.DefaultFetchOptions())
+	fetchDuration := time.Since(fetchStart)
+
 	if err != nil {
-		logger.Debug("crawler fetch error", "url", url, "error", err)
-		results <- Result{URL: url, Depth: depth, Error: fmt.Errorf("fetch error: %w", err)}
+		logger.Info("fetch failed", "url", url, "error", err, "duration", fetchDuration)
+		results <- Result{URL: url, Depth: depth, Error: fmt.Errorf("fetch error: %w", err), FetchDuration: fetchDuration}
 		return
 	}
 	logger.Debug("crawler fetch complete",
@@ -231,33 +241,49 @@ func (c *Crawler) processURL(
 	}
 
 	// Extract data if appropriate
+	var extractDuration time.Duration
 	if shouldExtract {
-		logger.Debug("crawler extracting data", "url", url)
+		extractStart := time.Now()
 		extractResult, err := c.extractor.Extract(ctx, content.Text, s)
+		extractDuration = time.Since(extractStart)
+
 		if err != nil {
-			logger.Debug("crawler extraction error", "url", url, "error", err)
+			logger.Info("extraction failed",
+				"url", url,
+				"fetch", fetchDuration.Round(time.Millisecond),
+				"extract", extractDuration.Round(time.Millisecond),
+				"error", err)
 			results <- Result{
-				URL:       url,
-				Depth:     depth,
-				Error:     fmt.Errorf("extraction error: %w", err),
-				FetchedAt: content.FetchedAt,
+				URL:             url,
+				Depth:           depth,
+				Error:           fmt.Errorf("extraction error: %w", err),
+				FetchedAt:       content.FetchedAt,
+				FetchDuration:   fetchDuration,
+				ExtractDuration: extractDuration,
 			}
 		} else {
 			logger.Debug("crawler extraction complete",
 				"url", url,
 				"validation_errors", len(extractResult.Errors))
+			logger.Info("extracted",
+				"url", url,
+				"fetch", fetchDuration.Round(time.Millisecond),
+				"llm", extractResult.LLMDuration.Round(time.Millisecond),
+				"tokens", extractResult.Usage.InputTokens+extractResult.Usage.OutputTokens)
 			results <- Result{
-				URL:       url,
-				Depth:     depth,
-				Data:      extractResult.Data,
-				Raw:       extractResult.Raw,
-				Errors:    extractResult.Errors,
-				Usage:     extractResult,
-				FetchedAt: content.FetchedAt,
+				URL:             url,
+				Depth:           depth,
+				Data:            extractResult.Data,
+				Raw:             extractResult.Raw,
+				Errors:          extractResult.Errors,
+				Usage:           extractResult,
+				FetchedAt:       content.FetchedAt,
+				FetchDuration:   fetchDuration,
+				ExtractDuration: extractDuration,
 			}
 		}
 	} else {
-		logger.Debug("crawler skipping extraction", "url", url, "depth", depth)
+		logger.Info("fetched (no extraction)", "url", url, "fetch", fetchDuration.Round(time.Millisecond), "links", len(content.Links))
 	}
 
 	// Follow links if configured and within depth limit
@@ -265,13 +291,19 @@ func (c *Crawler) processURL(
 		links, err := linkSelector.ExtractLinks(content.HTML, url)
 		if err == nil {
 			logger.Debug("crawler found links to follow", "url", url, "links_count", len(links))
+			addedCount := 0
 			for _, link := range links {
 				// Check same domain constraint
 				if c.config.SameDomainOnly && !IsSameDomain(url, link) {
 					logger.Debug("crawler skipping cross-domain link", "link", link)
 					continue
 				}
-				queue.Add(link, depth+1)
+				if queue.Add(link, depth+1) {
+					addedCount++
+				}
+			}
+			if addedCount > 0 {
+				logger.Info("following links", "from", url, "count", addedCount)
 			}
 		} else {
 			logger.Debug("crawler link extraction failed", "url", url, "error", err)
@@ -282,6 +314,7 @@ func (c *Crawler) processURL(
 	if paginationSelector != nil && depth == 0 {
 		if nextURL, found := paginationSelector.FindNextPage(content.HTML, url); found {
 			logger.Debug("crawler found next page", "next_url", nextURL)
+			logger.Info("pagination", "next", nextURL)
 			// Pagination stays at depth 0
 			queue.Add(nextURL, 0)
 		}
