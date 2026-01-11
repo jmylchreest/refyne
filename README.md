@@ -387,7 +387,3 @@ output_dir: ./refyne-lora
 ```bash
 accelerate launch -m axolotl.cli.train axolotl-config.yaml
 ```
-
-## License
-
-MIT
