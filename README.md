@@ -222,8 +222,12 @@ Crawling:
       --max-depth int        Max link depth (default 1)
       --max-pages int        Max pagination pages (0=unlimited)
       --max-urls int         Max total URLs to process (0=unlimited)
-      --delay duration       Delay between requests (default 500ms)
-  -c, --concurrency int      Concurrent requests (default 1)
+      --delay duration       Delay between requests (default 200ms)
+  -c, --concurrency int      Concurrent requests (default 3)
+
+Output:
+      --include-metadata     Wrap output with _metadata and data keys (default true)
+      --save-training-data   Save input/output pairs for fine-tuning (JSONL file path)
 ```
 
 ## Development
@@ -240,6 +244,146 @@ task fmt
 
 # Run linter
 task lint
+```
+
+## Fine-Tuning Local Models
+
+You can fine-tune a local model on your extraction tasks for faster, cheaper, offline operation.
+
+### 1. Generate Training Data
+
+Run extractions with a capable model and save training data:
+
+```bash
+refyne scrape \
+  -u "https://example.com/search" \
+  -s schema.yaml \
+  --follow "a.item-link" \
+  --max-urls 100 \
+  --save-training-data training.jsonl \
+  -o extractions.jsonl
+```
+
+This creates `training.jsonl` with input/output pairs:
+```json
+{"url":"https://...","input":"<page content>","output":{"title":"...","price":100}}
+```
+
+### 2. Fine-Tune with Unsloth (LoRA)
+
+[Unsloth](https://github.com/unslothai/unsloth) provides fast, memory-efficient LoRA fine-tuning.
+LoRA only trains small adapter layers instead of full model weights - faster training, less VRAM, smaller files.
+
+```python
+# train_lora.py
+from unsloth import FastLanguageModel
+import json
+
+# Load base model with LoRA
+model, tokenizer = FastLanguageModel.from_pretrained(
+    model_name="unsloth/Qwen2.5-3B",
+    max_seq_length=4096,
+    load_in_4bit=True,  # Use 4-bit quantization to save VRAM
+)
+
+# Add LoRA adapters
+model = FastLanguageModel.get_peft_model(
+    model,
+    r=16,              # LoRA rank
+    lora_alpha=16,
+    target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
+    lora_dropout=0,
+    bias="none",
+)
+
+# Load training data
+with open("training.jsonl") as f:
+    data = [json.loads(line) for line in f]
+
+# Format for training (input -> output pairs)
+def format_prompt(example):
+    return f"Extract structured data:\n{example['input']}\n\nJSON:\n{json.dumps(example['output'])}"
+
+# Train
+from trl import SFTTrainer
+trainer = SFTTrainer(
+    model=model,
+    train_dataset=data,
+    formatting_func=format_prompt,
+    max_seq_length=4096,
+)
+trainer.train()
+
+# Save LoRA adapter
+model.save_pretrained("refyne-lora")
+```
+
+**Good base models for structured extraction:**
+- `Qwen2.5-3B` or `Qwen2.5-7B` - Best for JSON tasks
+- `Llama-3.2-3B` - Fast, good general purpose
+- `Mistral-7B` - Solid all-rounder
+
+### 3. Merge LoRA and Convert to GGUF
+
+```bash
+# Merge LoRA adapter with base model
+python -c "
+from unsloth import FastLanguageModel
+model, tokenizer = FastLanguageModel.from_pretrained('refyne-lora')
+model.save_pretrained_merged('refyne-merged', tokenizer)
+"
+
+# Convert to GGUF for Ollama
+pip install llama-cpp-python
+python -m llama_cpp.convert refyne-merged --outfile refyne-extractor.gguf --outtype q4_k_m
+
+# Create Ollama model
+cat > Modelfile << 'EOF'
+FROM ./refyne-extractor.gguf
+PARAMETER temperature 0.1
+PARAMETER num_predict 4096
+EOF
+
+ollama create refyne-extractor -f Modelfile
+```
+
+### 4. Use Your Fine-Tuned Model
+
+```bash
+refyne scrape \
+  -u "https://example.com/page" \
+  -s schema.yaml \
+  -p ollama \
+  -m refyne-extractor
+```
+
+### Alternative: Axolotl
+
+For more control over LoRA training, use [Axolotl](https://github.com/OpenAccess-AI-Collective/axolotl):
+
+```yaml
+# axolotl-config.yaml
+base_model: Qwen/Qwen2.5-3B
+load_in_4bit: true
+
+adapter: lora
+lora_r: 16
+lora_alpha: 16
+lora_target_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - o_proj
+
+datasets:
+  - path: training.jsonl
+    type: completion
+
+output_dir: ./refyne-lora
+```
+
+```bash
+accelerate launch -m axolotl.cli.train axolotl-config.yaml
 ```
 
 ## License
