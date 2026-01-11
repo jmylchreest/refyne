@@ -51,6 +51,9 @@ type Provider interface {
 	// Name returns the provider identifier.
 	Name() string
 
+	// Model returns the configured model name.
+	Model() string
+
 	// SupportsJSONSchema returns true if provider has native JSON mode.
 	SupportsJSONSchema() bool
 }

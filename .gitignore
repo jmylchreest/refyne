@@ -1,6 +1,11 @@
 # Build artifacts
 bin/
 .task/
+/refyne
+/ddproperty
+
+# Log files
+*.log
 
 # Coverage
 coverage.out

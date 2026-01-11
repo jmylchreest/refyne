@@ -26,7 +26,7 @@ task example:zoopla:crawl -- "https://www.zoopla.co.uk/for-sale/property/north-y
 ./bin/refyne scrape \
   -u "https://www.zoopla.co.uk/for-sale/property/north-yorkshire/?q=york" \
   -s examples/zoopla/schema.yaml \
-  --follow "a[href*='/for-sale/details/']" \
+  --follow "a[href*='/for-sale/details/']:not([href*='/contact/'])" \
   --max-depth 1 \
   --delay 2s \
   --format jsonl \
@@ -40,13 +40,25 @@ task example:zoopla:crawl -- "https://www.zoopla.co.uk/for-sale/property/north-y
 ./bin/refyne scrape \
   -u "https://www.zoopla.co.uk/for-sale/property/north-yorkshire/" \
   -s examples/zoopla/schema.yaml \
-  --follow "a[href*='/for-sale/details/']" \
+  --follow "a[href*='/for-sale/details/']:not([href*='/contact/'])" \
   --next "a[data-testid='pagination-next']" \
   --max-pages 5 \
   --max-depth 1 \
   --delay 2s \
   --format jsonl \
   -o zoopla-listings.jsonl
+```
+
+## Go SDK Usage
+
+```bash
+cd examples/zoopla
+
+# Single listing
+go run main.go "https://www.zoopla.co.uk/for-sale/details/12345678/"
+
+# Crawl search results
+go run main.go "https://www.zoopla.co.uk/for-sale/property/london/" "a[href*='/for-sale/details/']:not([href*='/contact/'])"
 ```
 
 ## Schema Fields

@@ -129,7 +129,7 @@ tasks:
     desc: Crawl Zoopla search results (pass search URL as argument)
     dir: examples/zoopla
     cmds:
-      - go run ../../cmd/refyne scrape -u {{.CLI_ARGS}} -s schema.yaml --follow "a[href*='/for-sale/details/']" --max-depth 1 --delay 2s --timeout 60s --debug
+      - go run ../../cmd/refyne scrape -u {{.CLI_ARGS}} -s schema.yaml --follow "a[href*='/for-sale/details/']:not([href*='/contact/'])" --max-depth 1 --delay 2s --timeout 60s --debug
 
   example:simplyrecipes:cli:
     desc: Extract a Simply Recipes recipe (pass URL as argument)

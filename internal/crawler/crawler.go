@@ -6,9 +6,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/refyne/refyne/internal/extractor"
 	"github.com/refyne/refyne/internal/logger"
-	"github.com/refyne/refyne/internal/scraper"
+	"github.com/refyne/refyne/pkg/cleaner"
+	"github.com/refyne/refyne/pkg/extractor"
+	"github.com/refyne/refyne/pkg/fetcher"
 	"github.com/refyne/refyne/pkg/schema"
 )
 
@@ -18,7 +19,7 @@ type Result struct {
 	Data            any
 	Raw             string
 	Errors          []schema.ValidationError
-	Usage           extractor.ExtractionResult
+	Usage           *extractor.Result // Extraction result with token usage, model, etc.
 	Error           error
 	Depth           int
 	FetchedAt       time.Time
@@ -64,18 +65,20 @@ func DefaultConfig() Config {
 
 // Crawler orchestrates multi-page crawling and extraction.
 type Crawler struct {
-	fetcher   scraper.Fetcher
-	extractor *extractor.Extractor
+	fetcher   fetcher.Fetcher
+	cleaner   cleaner.Cleaner
+	extractor extractor.Extractor
 	config    Config
 }
 
 // New creates a new Crawler.
-func New(fetcher scraper.Fetcher, ext *extractor.Extractor, cfg Config) *Crawler {
+func New(f fetcher.Fetcher, cl cleaner.Cleaner, ext extractor.Extractor, cfg Config) *Crawler {
 	if cfg.Concurrency < 1 {
 		cfg.Concurrency = 1
 	}
 	return &Crawler{
-		fetcher:   fetcher,
+		fetcher:   f,
+		cleaner:   cl,
 		extractor: ext,
 		config:    cfg,
 	}
@@ -214,7 +217,7 @@ func (c *Crawler) processURL(
 
 	// Fetch the page
 	fetchStart := time.Now()
-	content, err := c.fetcher.Fetch(ctx, url, scraper.DefaultFetchOptions())
+	content, err := c.fetcher.Fetch(ctx, url, fetcher.Options{})
 	fetchDuration := time.Since(fetchStart)
 
 	if err != nil {
@@ -243,8 +246,28 @@ func (c *Crawler) processURL(
 	// Extract data if appropriate
 	var extractDuration time.Duration
 	if shouldExtract {
+		// Clean the HTML content before extraction
+		cleanStart := time.Now()
+		cleanedContent, err := c.cleaner.Clean(content.HTML)
+		cleanDuration := time.Since(cleanStart)
+		if err != nil {
+			// Fall back to fetcher's text extraction if cleaner fails
+			logger.Debug("cleaner failed, using raw text",
+				"url", url,
+				"cleaner", c.cleaner.Name(),
+				"error", err)
+			cleanedContent = content.Text
+		} else {
+			logger.Debug("content cleaned",
+				"url", url,
+				"cleaner", c.cleaner.Name(),
+				"input_size", len(content.HTML),
+				"output_size", len(cleanedContent),
+				"duration", cleanDuration)
+		}
+
 		extractStart := time.Now()
-		extractResult, err := c.extractor.Extract(ctx, content.Text, s)
+		extractResult, err := c.extractor.Extract(ctx, cleanedContent, s)
 		extractDuration = time.Since(extractStart)
 
 		if err != nil {
@@ -268,7 +291,7 @@ func (c *Crawler) processURL(
 			logger.Info("extracted",
 				"url", url,
 				"fetch", fetchDuration.Round(time.Millisecond),
-				"llm", extractResult.LLMDuration.Round(time.Millisecond),
+				"llm", extractResult.Duration.Round(time.Millisecond),
 				"tokens", extractResult.Usage.InputTokens+extractResult.Usage.OutputTokens)
 			results <- Result{
 				URL:             url,
@@ -299,7 +322,10 @@ func (c *Crawler) processURL(
 					continue
 				}
 				if queue.Add(link, depth+1) {
+					logger.Debug("crawler queued link", "link", link, "depth", depth+1)
 					addedCount++
+				} else {
+					logger.Debug("crawler skipping already-seen link", "link", link)
 				}
 			}
 			if addedCount > 0 {

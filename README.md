@@ -29,8 +29,8 @@ Refyne auto-detects your LLM provider based on available API keys:
 
 | Priority | Environment Variable | Provider | Default Model |
 |----------|---------------------|----------|---------------|
-| 1 | `OPENROUTER_API_KEY` | openrouter | xiaomi/mimo-v2-flash:free |
-| 2 | `ANTHROPIC_API_KEY` | anthropic | claude-opus-4-5-20251101 |
+| 1 | `OPENROUTER_API_KEY` | openrouter | openrouter/auto |
+| 2 | `ANTHROPIC_API_KEY` | anthropic | claude-sonnet-4-20250514 |
 | 3 | `OPENAI_API_KEY` | openai | gpt-4o |
 | 4 | (none needed) | ollama | llama3.2 |
 
@@ -55,6 +55,25 @@ Or environment variables:
 ```bash
 export REFYNE_PROVIDER=openrouter
 export REFYNE_MODEL=anthropic/claude-sonnet
+```
+
+Or a config file at `~/.refyne.yaml`:
+```yaml
+providers:
+  openrouter:
+    model: "xiaomi/mimo-v2-flash:free"
+    # temperature: 0.1
+    # max_tokens: 8192
+  anthropic:
+    model: "claude-sonnet-4-20250514"
+  ollama:
+    model: "llama3.2"
+
+# Fallback order when multiple providers are available
+fallback_order:
+  - openrouter
+  - anthropic
+  - ollama
 ```
 
 ### Building

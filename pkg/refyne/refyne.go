@@ -7,9 +7,14 @@ import (
 	"time"
 
 	"github.com/refyne/refyne/internal/crawler"
-	"github.com/refyne/refyne/internal/extractor"
-	"github.com/refyne/refyne/internal/llm"
-	"github.com/refyne/refyne/internal/scraper"
+	"github.com/refyne/refyne/internal/logger"
+	"github.com/refyne/refyne/pkg/cleaner"
+	"github.com/refyne/refyne/pkg/extractor"
+	"github.com/refyne/refyne/pkg/extractor/anthropic"
+	"github.com/refyne/refyne/pkg/extractor/ollama"
+	"github.com/refyne/refyne/pkg/extractor/openai"
+	"github.com/refyne/refyne/pkg/extractor/openrouter"
+	"github.com/refyne/refyne/pkg/fetcher"
 	"github.com/refyne/refyne/pkg/schema"
 )
 
@@ -38,9 +43,9 @@ type TokenUsage struct {
 
 // Refyne is the main entry point for web scraping with LLM extraction.
 type Refyne struct {
-	provider  llm.Provider
-	fetcher   scraper.Fetcher
-	extractor *extractor.Extractor
+	fetcher   fetcher.Fetcher
+	cleaner   cleaner.Cleaner
+	extractor extractor.Extractor
 	config    Config
 }
 
@@ -51,35 +56,61 @@ func New(opts ...Option) (*Refyne, error) {
 		opt(&cfg)
 	}
 
-	// Create LLM provider
-	provider, err := llm.NewProvider(cfg.Provider, llm.ProviderConfig{
-		APIKey:  cfg.APIKey,
-		BaseURL: cfg.BaseURL,
-		Model:   cfg.Model,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create LLM provider: %w", err)
+	// Use injected fetcher or create a default static one
+	var f fetcher.Fetcher
+	if cfg.Fetcher != nil {
+		f = cfg.Fetcher
+	} else {
+		f = fetcher.NewStatic(fetcher.StaticConfig{
+			UserAgent: cfg.UserAgent,
+			Timeout:   cfg.Timeout,
+		})
 	}
 
-	// Create fetcher
-	fetcher, err := scraper.NewFetcher(cfg.FetchMode, scraper.FetcherConfig{
-		UserAgent: cfg.UserAgent,
-		Timeout:   cfg.Timeout,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create fetcher: %w", err)
+	// Use injected cleaner or create a default markdown one
+	var cl cleaner.Cleaner
+	if cfg.Cleaner != nil {
+		cl = cfg.Cleaner
+	} else {
+		cl = cleaner.NewMarkdown()
 	}
 
-	// Create extractor
-	ext := extractor.New(provider,
-		extractor.WithMaxRetries(cfg.MaxRetries),
-		extractor.WithTemperature(cfg.Temperature),
-		extractor.WithMaxContentSize(cfg.MaxContentSize),
-	)
+	// Use injected extractor or create one based on provider
+	var ext extractor.Extractor
+	if cfg.Extractor != nil {
+		ext = cfg.Extractor
+	} else {
+		llmCfg := &extractor.LLMConfig{
+			Model:          cfg.Model,
+			APIKey:         cfg.APIKey,
+			BaseURL:        cfg.BaseURL,
+			Temperature:    cfg.Temperature,
+			MaxRetries:     cfg.MaxRetries,
+			MaxContentSize: cfg.MaxContentSize,
+		}
+
+		var err error
+		switch cfg.Provider {
+		case "openai":
+			ext, err = openai.New(llmCfg)
+		case "openrouter":
+			ext, err = openrouter.New(llmCfg)
+		case "ollama":
+			ext, err = ollama.New(llmCfg)
+		case "anthropic", "":
+			// Default to Anthropic
+			ext, err = anthropic.New(llmCfg)
+		default:
+			return nil, fmt.Errorf("unknown provider: %s (use anthropic, openai, openrouter, or ollama)", cfg.Provider)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("failed to create extractor: %w", err)
+		}
+	}
 
 	return &Refyne{
-		provider:  provider,
-		fetcher:   fetcher,
+		fetcher:   f,
+		cleaner:   cl,
 		extractor: ext,
 		config:    cfg,
 	}, nil
@@ -87,19 +118,40 @@ func New(opts ...Option) (*Refyne, error) {
 
 // Extract fetches a single URL and extracts structured data.
 func (r *Refyne) Extract(ctx context.Context, url string, s schema.Schema) (*Result, error) {
-	// Fetch the page
-	fetchStart := time.Now()
-	content, err := r.fetcher.Fetch(ctx, url, scraper.FetchOptions{
+	// Prepare fetch options
+	fetchOpts := fetcher.Options{
 		UserAgent: r.config.UserAgent,
 		Timeout:   r.config.Timeout,
-	})
+	}
+
+	// Fetch the page
+	fetchStart := time.Now()
+	content, err := r.fetcher.Fetch(ctx, url, fetchOpts)
 	fetchDuration := time.Since(fetchStart)
 	if err != nil {
 		return nil, fmt.Errorf("fetch failed: %w", err)
 	}
 
-	// Extract data
-	result, err := r.extractor.Extract(ctx, content.Text, s)
+	// Clean the content (convert HTML to markdown or other format)
+	cleanStart := time.Now()
+	cleanedContent, err := r.cleaner.Clean(content.HTML)
+	cleanDuration := time.Since(cleanStart)
+	if err != nil {
+		// Fall back to fetcher's text extraction if cleaner fails
+		logger.Debug("cleaner failed, using raw text",
+			"cleaner", r.cleaner.Name(),
+			"error", err)
+		cleanedContent = content.Text
+	} else {
+		logger.Debug("content cleaned",
+			"cleaner", r.cleaner.Name(),
+			"input_size", len(content.HTML),
+			"output_size", len(cleanedContent),
+			"duration", cleanDuration)
+	}
+
+	// Extract data using cleaned content
+	result, err := r.extractor.Extract(ctx, cleanedContent, s)
 	if err != nil {
 		return nil, fmt.Errorf("extraction failed: %w", err)
 	}
@@ -118,7 +170,7 @@ func (r *Refyne) Extract(ctx context.Context, url string, s schema.Schema) (*Res
 		Provider:        result.Provider,
 		RetryCount:      result.RetryCount,
 		FetchDuration:   fetchDuration,
-		ExtractDuration: result.LLMDuration,
+		ExtractDuration: result.Duration,
 		Errors:          result.Errors,
 	}, nil
 }
@@ -170,8 +222,8 @@ func (r *Refyne) CrawlMany(ctx context.Context, seeds []string, s schema.Schema,
 		opt(&crawlCfg)
 	}
 
-	// Create crawler
-	c := crawler.New(r.fetcher, r.extractor, crawlCfg)
+	// Create crawler with cleaner
+	c := crawler.New(r.fetcher, r.cleaner, r.extractor, crawlCfg)
 
 	// Start crawling
 	crawlResults := c.Crawl(ctx, seeds, s)
@@ -181,24 +233,28 @@ func (r *Refyne) CrawlMany(ctx context.Context, seeds []string, s schema.Schema,
 	go func() {
 		defer close(results)
 		for cr := range crawlResults {
-			results <- &Result{
-				URL:        cr.URL,
-				FetchedAt:  cr.FetchedAt,
-				Data:       cr.Data,
-				Raw:        cr.Raw,
-				RawContent: cr.Usage.RawContent,
-				TokenUsage: TokenUsage{
-					InputTokens:  cr.Usage.Usage.InputTokens,
-					OutputTokens: cr.Usage.Usage.OutputTokens,
-				},
-				Model:           cr.Usage.Model,
-				Provider:        cr.Usage.Provider,
-				RetryCount:      cr.Usage.RetryCount,
+			result := &Result{
+				URL:             cr.URL,
+				FetchedAt:       cr.FetchedAt,
+				Data:            cr.Data,
+				Raw:             cr.Raw,
 				FetchDuration:   cr.FetchDuration,
 				ExtractDuration: cr.ExtractDuration,
 				Errors:          cr.Errors,
 				Error:           cr.Error,
 			}
+			// Copy extraction metadata if available (nil when extraction failed/skipped)
+			if cr.Usage != nil {
+				result.RawContent = cr.Usage.RawContent
+				result.TokenUsage = TokenUsage{
+					InputTokens:  cr.Usage.Usage.InputTokens,
+					OutputTokens: cr.Usage.Usage.OutputTokens,
+				}
+				result.Model = cr.Usage.Model
+				result.Provider = cr.Usage.Provider
+				result.RetryCount = cr.Usage.RetryCount
+			}
+			results <- result
 		}
 	}()
 
@@ -213,7 +269,7 @@ func (r *Refyne) Close() error {
 	return nil
 }
 
-// Provider returns the underlying LLM provider name.
+// Provider returns the extractor/provider name.
 func (r *Refyne) Provider() string {
-	return r.provider.Name()
+	return r.extractor.Name()
 }

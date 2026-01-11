@@ -2,30 +2,51 @@
 
 This example extracts basic information from any webpage.
 
-## Usage
-
-From the repository root:
+## CLI Usage
 
 ```bash
-# Using task
-task example:simple -- "https://example.com"
-
-# Or directly with the CLI
-./bin/refyne scrape -u "https://example.com" -s examples/simple/schema.yaml
+# Basic extraction
+refyne scrape -u "https://example.com" -s examples/simple/schema.yaml
 
 # Output as YAML
-./bin/refyne scrape -u "https://example.com" -s examples/simple/schema.yaml --format yaml
+refyne scrape -u "https://example.com" -s examples/simple/schema.yaml --format yaml
 
 # Use a different provider
-./bin/refyne scrape -u "https://example.com" -s examples/simple/schema.yaml -p ollama -m llama3.2
+refyne scrape -u "https://example.com" -s examples/simple/schema.yaml -p ollama -m llama3.2
+
+# With debug output
+refyne scrape -u "https://example.com" -s examples/simple/schema.yaml --debug
+```
+
+## Go SDK Usage
+
+```bash
+cd examples/simple
+go run main.go "https://example.com"
 ```
 
 ## Schema
 
 The schema extracts:
 - **title**: Page title
-- **summary**: Brief content summary
+- **summary**: Brief content summary (2-3 sentences)
 - **key_points**: Important facts/takeaways
 - **links_mentioned**: External resources referenced
 - **author**: Author if present
 - **date**: Publication date if present
+
+## Example Output
+
+```json
+{
+  "title": "Example Domain",
+  "summary": "This domain is for use in illustrative examples in documents.",
+  "key_points": [
+    "Reserved for documentation purposes",
+    "Can be used without prior coordination"
+  ],
+  "links_mentioned": [
+    "https://www.iana.org/domains/example"
+  ]
+}
+```

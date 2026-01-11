@@ -138,6 +138,11 @@ func (p *OllamaProvider) Name() string {
 	return "ollama"
 }
 
+// Model returns the configured model name.
+func (p *OllamaProvider) Model() string {
+	return p.model
+}
+
 // SupportsJSONSchema returns true as Ollama 0.5+ supports structured outputs.
 func (p *OllamaProvider) SupportsJSONSchema() bool {
 	return true

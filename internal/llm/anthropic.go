@@ -143,6 +143,11 @@ func (p *AnthropicProvider) Name() string {
 	return "anthropic"
 }
 
+// Model returns the configured model name.
+func (p *AnthropicProvider) Model() string {
+	return p.model
+}
+
 // SupportsJSONSchema returns true as Anthropic supports tool-based structured output.
 func (p *AnthropicProvider) SupportsJSONSchema() bool {
 	return true

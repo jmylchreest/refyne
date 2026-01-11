@@ -3,6 +3,7 @@ package commands
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/signal"
 	"strings"
@@ -13,10 +14,16 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	"github.com/refyne/refyne/internal/llm"
+	clifetcher "github.com/refyne/refyne/cmd/refyne/fetcher"
 	"github.com/refyne/refyne/internal/logger"
 	"github.com/refyne/refyne/internal/output"
-	"github.com/refyne/refyne/internal/scraper"
+	"github.com/refyne/refyne/pkg/cleaner"
+	"github.com/refyne/refyne/pkg/extractor"
+	"github.com/refyne/refyne/pkg/extractor/anthropic"
+	"github.com/refyne/refyne/pkg/extractor/ollama"
+	"github.com/refyne/refyne/pkg/extractor/openai"
+	"github.com/refyne/refyne/pkg/extractor/openrouter"
+	"github.com/refyne/refyne/pkg/fetcher"
 	"github.com/refyne/refyne/pkg/refyne"
 	"github.com/refyne/refyne/pkg/schema"
 )
@@ -90,12 +97,16 @@ func init() {
 	flags.String("save-training-data", "", "save input/output pairs for fine-tuning to this file (JSONL)")
 
 	// Fetch settings
-	flags.String("fetch-mode", "auto", "fetch mode: auto, static, dynamic")
+	flags.String("fetch-mode", "static", "fetch mode: static, dynamic")
 	flags.Duration("timeout", 30*time.Second, "request timeout")
+	flags.Bool("stealth", false, "enable anti-bot detection evasion for dynamic fetch mode")
+	flags.Bool("googlebot", false, "spoof Googlebot user-agent (sites often whitelist Googlebot)")
+	flags.String("flaresolverr-url", "", "FlareSolverr API URL for Cloudflare bypass (e.g., http://localhost:8191/v1)")
 
 	// Extraction settings
 	flags.Int("max-retries", 3, "max extraction retries")
 	flags.String("max-content-size", "100KB", "max input content size (e.g., 100KB, 1MB, 0=unlimited)")
+	flags.Bool("no-cleanse", false, "disable content cleaning (pass raw HTML to LLM)")
 
 	// Crawling settings
 	flags.String("follow", "", "CSS selector for links to follow")
@@ -148,7 +159,6 @@ func runScrape(cmd *cobra.Command, args []string) error {
 
 	// Get fetch mode
 	fetchModeStr, _ := cmd.Flags().GetString("fetch-mode")
-	fetchMode := scraper.FetchMode(fetchModeStr)
 	logger.Debug("fetch mode", "mode", fetchModeStr)
 
 	// Get timeout
@@ -172,42 +182,79 @@ func runScrape(cmd *cobra.Command, args []string) error {
 	}
 	logger.Debug("max content size", "bytes", maxContentSize)
 
-	// Determine provider and model
-	// Priority: explicit flags > viper config > auto-detection
-	provider := viper.GetString("provider")
-	model := viper.GetString("model")
-	apiKey := viper.GetString("api_key")
+	// Get fetcher options
+	stealth, _ := cmd.Flags().GetBool("stealth")
+	googlebot, _ := cmd.Flags().GetBool("googlebot")
+	flareSolverrURL, _ := cmd.Flags().GetString("flaresolverr-url")
 
-	// Auto-detect provider if not explicitly set
-	if provider == "" {
-		detectedProvider, detectedKey := llm.DetectProvider()
-		provider = detectedProvider
-		if apiKey == "" {
-			apiKey = detectedKey
+	// Create fetcher based on mode
+	var f fetcher.Fetcher
+	switch fetchModeStr {
+	case "dynamic":
+		// Use CLI's dynamic fetcher with advanced options
+		dynamicFetcher, err := clifetcher.NewDynamicFetcher(clifetcher.Config{
+			Timeout:         timeout,
+			Stealth:         stealth,
+			Googlebot:       googlebot,
+			FlareSolverrURL: flareSolverrURL,
+		})
+		if err != nil {
+			logger.Error("failed to create dynamic fetcher", "error", err)
+			return err
 		}
-		logger.Debug("auto-detected provider", "provider", provider)
+		f = dynamicFetcher
+	case "static", "":
+		// Use static fetcher (default)
+		f = fetcher.NewStatic(fetcher.StaticConfig{
+			Timeout: timeout,
+		})
+	default:
+		return fmt.Errorf("unknown fetch mode: %s (use 'static' or 'dynamic')", fetchModeStr)
+	}
+	// Note: fetcher is closed by refyne.Close()
+
+	// Create cleaner based on --no-cleanse flag
+	noCleanse, _ := cmd.Flags().GetBool("no-cleanse")
+	var cl cleaner.Cleaner
+	if noCleanse {
+		cl = cleaner.NewNoop()
+		logger.Debug("content cleaning disabled")
+	} else {
+		// Default: Trafilatura (extract main content) → Markdown (format for LLM)
+		cl = cleaner.NewChain(
+			cleaner.NewTrafilatura(nil),
+			cleaner.NewMarkdown(),
+		)
+		logger.Debug("using default cleaner chain", "cleaner", cl.Name())
 	}
 
-	// Use default model for provider if not explicitly set
-	if model == "" {
-		model = llm.GetDefaultModel(provider)
-		logger.Debug("using default model", "model", model)
+	// Build extractor fallback chain
+	// Order: --provider flag first (if set), then config fallback_order, default: openrouter → anthropic → ollama
+	preferredProvider := viper.GetString("provider")
+	modelOverride := viper.GetString("model") // Override model for preferred provider
+
+	llmCfg := &extractor.LLMConfig{
+		MaxRetries:     maxRetries,
+		MaxContentSize: maxContentSize,
 	}
 
-	logger.Debug("creating refyne instance",
-		"provider", provider,
-		"model", model,
-		"has_api_key", apiKey != "")
+	ext, err := buildExtractorChain(preferredProvider, modelOverride, llmCfg)
+	if err != nil {
+		logger.Error("failed to build extractor chain", "error", err)
+		return err
+	}
+
+	if !ext.Available() {
+		logger.Error("no extractors available - set an API key or run Ollama locally")
+		return fmt.Errorf("no extractors available")
+	}
+
+	logger.Debug("extractor chain built", "chain", ext.Name())
 
 	r, err := refyne.New(
-		refyne.WithProvider(provider),
-		refyne.WithModel(model),
-		refyne.WithAPIKey(apiKey),
-		refyne.WithBaseURL(viper.GetString("base_url")),
-		refyne.WithFetchMode(fetchMode),
-		refyne.WithTimeout(timeout),
-		refyne.WithMaxRetries(maxRetries),
-		refyne.WithMaxContentSize(maxContentSize),
+		refyne.WithFetcher(f),
+		refyne.WithCleaner(cl),
+		refyne.WithExtractor(ext),
 	)
 	if err != nil {
 		logger.Error("failed to initialize", "error", err)
@@ -274,8 +321,7 @@ func runScrape(cmd *cobra.Command, args []string) error {
 		// Crawling mode
 		logger.Info("starting crawl",
 			"seeds", len(urls),
-			"provider", provider,
-			"model", model,
+			"extractors", ext.Name(),
 			"concurrency", concurrency,
 			"delay", delay)
 
@@ -354,8 +400,7 @@ func runScrape(cmd *cobra.Command, args []string) error {
 		// Simple extraction mode
 		logger.Info("starting extraction",
 			"urls", len(urls),
-			"provider", provider,
-			"model", model,
+			"extractors", ext.Name(),
 			"concurrency", concurrency)
 
 		results := r.ExtractMany(ctx, urls, s, concurrency)
@@ -412,4 +457,142 @@ func runScrape(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
+}
+
+// ProviderConfig holds provider-specific settings from config file.
+type ProviderConfig struct {
+	Model       string  `mapstructure:"model"`
+	Temperature float64 `mapstructure:"temperature"`
+	MaxTokens   int     `mapstructure:"max_tokens"`
+	BaseURL     string  `mapstructure:"base_url"`
+}
+
+// Default fallback order: openrouter → anthropic → ollama
+var defaultFallbackOrder = []string{"openrouter", "anthropic", "ollama"}
+
+// buildExtractorChain creates a fallback extractor chain based on config.
+// If preferredProvider is set (via --provider flag), it goes first.
+// If modelOverride is set (via --model flag), it overrides the preferred provider's model.
+// Then uses fallback_order from config, or default: openrouter → anthropic → ollama.
+// Only adds providers that have API keys (except ollama which is always available).
+func buildExtractorChain(preferredProvider, modelOverride string, baseCfg *extractor.LLMConfig) (*extractor.FallbackExtractor, error) {
+	var extractors []extractor.Extractor
+	added := make(map[string]bool)
+
+	// Get fallback order from config, or use default
+	fallbackOrder := viper.GetStringSlice("fallback_order")
+	if len(fallbackOrder) == 0 {
+		fallbackOrder = defaultFallbackOrder
+	}
+
+	// If preferred provider specified, put it first
+	if preferredProvider != "" {
+		// Remove from fallback order if present, then prepend
+		var newOrder []string
+		newOrder = append(newOrder, preferredProvider)
+		for _, p := range fallbackOrder {
+			if p != preferredProvider {
+				newOrder = append(newOrder, p)
+			}
+		}
+		fallbackOrder = newOrder
+	}
+
+	// Get provider-specific configs
+	providerConfigs := make(map[string]ProviderConfig)
+	_ = viper.UnmarshalKey("providers", &providerConfigs)
+
+	// Helper to get provider config merged with base config
+	getProviderConfig := func(name string, isPreferred bool) *extractor.LLMConfig {
+		cfg := &extractor.LLMConfig{
+			MaxRetries:     baseCfg.MaxRetries,
+			MaxContentSize: baseCfg.MaxContentSize,
+		}
+
+		// Apply provider-specific config from file
+		if pc, ok := providerConfigs[name]; ok {
+			if pc.Model != "" {
+				cfg.Model = pc.Model
+			}
+			if pc.Temperature > 0 {
+				cfg.Temperature = pc.Temperature
+			}
+			if pc.MaxTokens > 0 {
+				cfg.MaxTokens = pc.MaxTokens
+			}
+			if pc.BaseURL != "" {
+				cfg.BaseURL = pc.BaseURL
+			}
+		}
+
+		// If this is the preferred provider and model override is set, use it
+		if isPreferred && modelOverride != "" {
+			cfg.Model = modelOverride
+		}
+
+		return cfg
+	}
+
+	// Helper to add an extractor if not already added
+	addExtractor := func(name string, ext extractor.Extractor, err error) bool {
+		if err != nil {
+			logger.Debug("failed to create extractor", "provider", name, "error", err)
+			return false
+		}
+		if added[name] {
+			return false
+		}
+		added[name] = true
+		extractors = append(extractors, ext)
+		logger.Debug("added extractor to chain", "provider", name, "available", ext.Available())
+		return true
+	}
+
+	// Build chain in fallback order
+	for _, provider := range fallbackOrder {
+		cfg := getProviderConfig(provider, provider == preferredProvider)
+
+		switch provider {
+		case "anthropic":
+			apiKey := os.Getenv("ANTHROPIC_API_KEY")
+			if apiKey == "" {
+				continue // Skip if no API key
+			}
+			cfg.APIKey = apiKey
+			ext, err := anthropic.New(cfg)
+			addExtractor("anthropic", ext, err)
+
+		case "openai":
+			apiKey := os.Getenv("OPENAI_API_KEY")
+			if apiKey == "" {
+				continue
+			}
+			cfg.APIKey = apiKey
+			ext, err := openai.New(cfg)
+			addExtractor("openai", ext, err)
+
+		case "openrouter":
+			apiKey := os.Getenv("OPENROUTER_API_KEY")
+			if apiKey == "" {
+				continue
+			}
+			cfg.APIKey = apiKey
+			ext, err := openrouter.New(cfg)
+			addExtractor("openrouter", ext, err)
+
+		case "ollama":
+			// Ollama doesn't need an API key - always add it
+			ext, err := ollama.New(cfg)
+			addExtractor("ollama", ext, err)
+
+		default:
+			logger.Debug("unknown provider in fallback_order", "provider", provider)
+		}
+	}
+
+	if len(extractors) == 0 {
+		return nil, fmt.Errorf("no extractors could be created")
+	}
+
+	return extractor.NewFallback(extractors...), nil
 }

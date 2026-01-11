@@ -10,9 +10,10 @@ import (
 
 // OpenAIProvider wraps the OpenAI SDK.
 type OpenAIProvider struct {
-	client openai.Client
-	model  string
-	cfg    ProviderConfig
+	client       openai.Client
+	model        string
+	cfg          ProviderConfig
+	providerName string // "openai" or "openrouter"
 }
 
 // NewOpenAIProvider creates a new OpenAI provider.
@@ -34,9 +35,10 @@ func NewOpenAIProvider(cfg ProviderConfig) (*OpenAIProvider, error) {
 	}
 
 	return &OpenAIProvider{
-		client: client,
-		model:  model,
-		cfg:    cfg,
+		client:       client,
+		model:        model,
+		cfg:          cfg,
+		providerName: "openai",
 	}, nil
 }
 
@@ -45,7 +47,12 @@ func NewOpenRouterProvider(cfg ProviderConfig) (*OpenAIProvider, error) {
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://openrouter.ai/api/v1"
 	}
-	return NewOpenAIProvider(cfg)
+	provider, err := NewOpenAIProvider(cfg)
+	if err != nil {
+		return nil, err
+	}
+	provider.providerName = "openrouter"
+	return provider, nil
 }
 
 // Complete sends a completion request to OpenAI.
@@ -110,7 +117,12 @@ func (p *OpenAIProvider) Complete(ctx context.Context, req CompletionRequest) (C
 
 // Name returns the provider identifier.
 func (p *OpenAIProvider) Name() string {
-	return "openai"
+	return p.providerName
+}
+
+// Model returns the configured model name.
+func (p *OpenAIProvider) Model() string {
+	return p.model
 }
 
 // SupportsJSONSchema returns true as OpenAI supports structured outputs.

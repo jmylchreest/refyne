@@ -5,7 +5,9 @@ import (
 	"time"
 
 	"github.com/refyne/refyne/internal/crawler"
-	"github.com/refyne/refyne/internal/scraper"
+	"github.com/refyne/refyne/pkg/cleaner"
+	"github.com/refyne/refyne/pkg/extractor"
+	"github.com/refyne/refyne/pkg/fetcher"
 )
 
 // Config holds all Refyne configuration.
@@ -17,11 +19,13 @@ type Config struct {
 	BaseURL  string
 
 	// Scraping settings
-	FetchMode scraper.FetchMode
 	UserAgent string
 	Timeout   time.Duration
+	Fetcher   fetcher.Fetcher   // Optional: inject a pre-configured fetcher
+	Cleaner   cleaner.Cleaner   // Optional: inject a content cleaner (default: markdown)
+	Extractor extractor.Extractor // Optional: inject a custom extractor
 
-	// Extraction settings
+	// Extraction settings (used when Extractor is nil)
 	MaxRetries     int
 	Temperature    float64
 	MaxContentSize int // Max input content size in bytes (0 = default 100KB)
@@ -37,7 +41,6 @@ const defaultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/
 func DefaultConfig() Config {
 	return Config{
 		Provider:       "anthropic",
-		FetchMode:      scraper.FetchModeAuto,
 		UserAgent:      defaultUserAgent,
 		Timeout:        30 * time.Second,
 		MaxRetries:     3,
@@ -78,13 +81,6 @@ func WithBaseURL(url string) Option {
 	}
 }
 
-// WithFetchMode sets the fetch mode (auto, static, dynamic).
-func WithFetchMode(mode scraper.FetchMode) Option {
-	return func(c *Config) {
-		c.FetchMode = mode
-	}
-}
-
 // WithUserAgent sets the HTTP user agent.
 func WithUserAgent(ua string) Option {
 	return func(c *Config) {
@@ -117,6 +113,36 @@ func WithTemperature(t float64) Option {
 func WithMaxContentSize(n int) Option {
 	return func(c *Config) {
 		c.MaxContentSize = n
+	}
+}
+
+// WithFetcher injects a pre-configured fetcher.
+// This allows the caller to configure dynamic fetching, stealth mode,
+// Googlebot spoofing, FlareSolverr, and other fetcher-specific options.
+// See cmd/refyne/fetcher for example implementations.
+func WithFetcher(f fetcher.Fetcher) Option {
+	return func(c *Config) {
+		c.Fetcher = f
+	}
+}
+
+// WithCleaner injects a content cleaner.
+// The cleaner transforms fetched HTML into a format suitable for LLM extraction.
+// Default: MarkdownCleaner (converts HTML to clean Markdown)
+// Use cleaner.NewNoop() to pass content through unchanged.
+func WithCleaner(cl cleaner.Cleaner) Option {
+	return func(c *Config) {
+		c.Cleaner = cl
+	}
+}
+
+// WithExtractor injects a custom extractor.
+// The extractor handles structured data extraction from cleaned content.
+// Default: creates an LLM-based extractor using the configured provider.
+// Use extractor.NewFallback() to try multiple extractors in order.
+func WithExtractor(ext extractor.Extractor) Option {
+	return func(c *Config) {
+		c.Extractor = ext
 	}
 }
 

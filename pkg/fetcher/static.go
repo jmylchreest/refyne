@@ -1,4 +1,4 @@
-package scraper
+package fetcher
 
 import (
 	"context"
@@ -12,27 +12,45 @@ import (
 	"github.com/refyne/refyne/internal/logger"
 )
 
-// StaticFetcher uses Colly for static HTML fetching.
-type StaticFetcher struct {
-	config FetcherConfig
+// StaticConfig holds configuration for the static fetcher.
+type StaticConfig struct {
+	UserAgent string
+	Timeout   time.Duration
 }
 
-// NewStaticFetcher creates a new static fetcher.
-func NewStaticFetcher(cfg FetcherConfig) *StaticFetcher {
+// DefaultStaticConfig returns sensible defaults.
+func DefaultStaticConfig() StaticConfig {
+	return StaticConfig{
+		UserAgent: defaultUserAgent,
+		Timeout:   30 * time.Second,
+	}
+}
+
+// Chrome user agent for better compatibility
+const defaultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+// StaticFetcher uses Colly for static HTML fetching.
+// It implements the Fetcher interface.
+type StaticFetcher struct {
+	config StaticConfig
+}
+
+// NewStatic creates a new static fetcher.
+func NewStatic(cfg StaticConfig) *StaticFetcher {
 	if cfg.UserAgent == "" {
-		cfg.UserAgent = DefaultFetcherConfig().UserAgent
+		cfg.UserAgent = DefaultStaticConfig().UserAgent
 	}
 	if cfg.Timeout == 0 {
-		cfg.Timeout = DefaultFetcherConfig().Timeout
+		cfg.Timeout = DefaultStaticConfig().Timeout
 	}
 	return &StaticFetcher{config: cfg}
 }
 
 // Fetch retrieves page content using Colly.
-func (f *StaticFetcher) Fetch(ctx context.Context, targetURL string, opts FetchOptions) (PageContent, error) {
+func (f *StaticFetcher) Fetch(ctx context.Context, targetURL string, opts Options) (Content, error) {
 	logger.Debug("static fetch starting", "url", targetURL)
 
-	result := PageContent{
+	result := Content{
 		URL:       targetURL,
 		FetchedAt: time.Now(),
 	}
@@ -114,7 +132,7 @@ func (f *StaticFetcher) Fetch(ctx context.Context, targetURL string, opts FetchO
 }
 
 // parseContent extracts text and metadata from HTML.
-func (f *StaticFetcher) parseContent(content *PageContent) error {
+func (f *StaticFetcher) parseContent(content *Content) error {
 	doc, err := goquery.NewDocumentFromReader(strings.NewReader(content.HTML))
 	if err != nil {
 		return err

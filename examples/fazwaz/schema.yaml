@@ -1,0 +1,117 @@
+name: FazWazListing
+description: |
+  A FazWaz Thailand property listing page. Extract property details including
+  prices in multiple currencies.
+
+  IMPORTANT: Extract all prices shown on the page in their respective currencies.
+  Additionally, ALWAYS include the price in USD - if USD is not shown on the page,
+  convert from the available price using current exchange rates (look up today's rates).
+
+fields:
+  - name: title
+    type: string
+    description: "Property title or headline from the listing"
+    required: true
+
+  - name: prices
+    type: array
+    description: "All prices for this property. Include every currency shown on page, plus USD (converted if not shown)"
+    required: true
+    items:
+      type: object
+      properties:
+        currency:
+          type: string
+          description: "Currency code (USD, GBP, THB, EUR, etc.)"
+        value:
+          type: integer
+          description: "Price value as integer (no decimals)"
+        source:
+          type: string
+          description: "'page' if extracted from page, 'converted' if calculated from another currency"
+
+  - name: price_per_sqm
+    type: array
+    description: "Price per square meter in available currencies"
+    items:
+      type: object
+      properties:
+        currency:
+          type: string
+          description: "Currency code"
+        value:
+          type: integer
+          description: "Price per sqm as integer"
+
+  - name: address
+    type: string
+    description: "Property location (district, city, province)"
+    required: true
+
+  - name: province
+    type: string
+    description: "Thai province name (e.g. Prachuap Khiri Khan, Phuket, Bangkok)"
+
+  - name: district
+    type: string
+    description: "District name (e.g. Hua Hin, Nong Kae)"
+
+  - name: project_name
+    type: string
+    description: "Development or project name if applicable"
+
+  - name: bedrooms
+    type: integer
+    description: "Number of bedrooms"
+
+  - name: bathrooms
+    type: integer
+    description: "Number of bathrooms"
+
+  - name: area_sqm
+    type: number
+    description: "Property area in square meters"
+
+  - name: land_area_sqm
+    type: number
+    description: "Land area in square meters if shown (for houses/villas)"
+
+  - name: property_type
+    type: string
+    description: "Type of property: House, Condo, Villa, Townhouse, Land, Apartment, Penthouse"
+
+  - name: ownership
+    type: string
+    description: "Ownership type if shown: Freehold, Leasehold, Foreign Freehold"
+
+  - name: completion_status
+    type: string
+    description: "Off Plan, Under Construction, or Completed"
+
+  - name: year_built
+    type: integer
+    description: "Year the property was built or expected completion year"
+
+  - name: description
+    type: string
+    description: "Property description summary (first 500 characters)"
+
+  - name: features
+    type: array
+    description: "Key features: pool, garden, parking, sea view, gym, security, etc."
+    items:
+      type: string
+
+  - name: nearby_places
+    type: array
+    description: "Nearby amenities, beaches, schools, hospitals mentioned"
+    items:
+      type: string
+
+  - name: agent_name
+    type: string
+    description: "Listing agent or agency name"
+
+  - name: listing_url
+    type: string
+    description: "The full URL of this property listing"

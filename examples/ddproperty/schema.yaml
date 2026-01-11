@@ -1,40 +1,100 @@
 name: DDPropertyListing
 description: |
-  A DDProperty Thailand property listing page. Extract property details including
-  price in Thai Baht, bedrooms, bathrooms, land area, and Thai-specific fields.
-  The page content is in Thai language.
+  A DDProperty Thailand property listing page. The page may be in Thai or English.
+
+  CRITICAL OUTPUT REQUIREMENTS:
+  1. ALL text output MUST be in English
+  2. For proper nouns (project names, districts, provinces) that have no direct translation:
+     - Use format: "English Name (ชื่อไทย)" - romanized/English first, Thai original in parentheses
+     - Example: "The Seacraze (เดอะ ซีเครซ)"
+     - Example: "Hua Hin (หัวหิน)"
+  3. For descriptive text: translate fully to English, do not include Thai
+  4. For features/amenities: use standard English terms (pool, gym, security, etc.)
+
+  PRICE EXTRACTION:
+  - Extract all prices shown on the page in Thai Baht (THB)
+  - ALWAYS calculate and include converted prices in USD and GBP
+  - Use approximate exchange rates: 1 USD = 35 THB, 1 GBP = 45 THB
+  - Mark page-extracted prices as source="page", calculated ones as source="converted"
 
 fields:
   - name: title
-    type: string
-    description: "Property title or headline from the listing (may be in Thai)"
+    type: object
+    description: "Property title with English and original Thai if different"
     required: true
+    properties:
+      en:
+        type: string
+        description: "English title (translated if original was Thai)"
+      th:
+        type: string
+        description: "Original Thai title if present, null if page was in English"
 
-  - name: price_thb
-    type: integer
-    description: "Listing price in Thai Baht (numeric value only, no currency symbol)"
+  - name: project_name
+    type: object
+    description: "Development/project name if this is part of a development"
+    properties:
+      en:
+        type: string
+        description: "English/romanized project name"
+      th:
+        type: string
+        description: "Thai project name if shown"
+
+  - name: prices
+    type: array
+    description: "All prices for this property. Include THB from page, plus USD and GBP converted"
     required: true
+    items:
+      type: object
+      properties:
+        currency:
+          type: string
+          description: "Currency code: THB, USD, or GBP"
+        value:
+          type: integer
+          description: "Price value as integer (no decimals)"
+        source:
+          type: string
+          description: "'page' if extracted from page, 'converted' if calculated"
 
-  - name: price_gbp_approx
-    type: integer
-    description: "Approximate price in GBP using rough conversion of 1 GBP = 45 THB"
+  - name: price_per_sqm
+    type: array
+    description: "Price per square meter in THB (from page) and converted currencies"
+    items:
+      type: object
+      properties:
+        currency:
+          type: string
+          description: "Currency code: THB, USD, or GBP"
+        value:
+          type: integer
+          description: "Price per sqm as integer"
+        source:
+          type: string
+          description: "'page' or 'converted'"
 
   - name: price_qualifier
     type: string
-    description: "Price qualifier if present (e.g. 'negotiable', 'starting from')"
+    description: "Price qualifier in English: 'negotiable', 'starting from', 'fixed', etc."
 
-  - name: address
-    type: string
-    description: "Property address or location description"
+  - name: location
+    type: object
+    description: "Property location details"
     required: true
-
-  - name: province
-    type: string
-    description: "Thai province name (e.g. Krabi, Phuket, Bangkok)"
-
-  - name: district
-    type: string
-    description: "District or amphoe name"
+    properties:
+      address:
+        type: string
+        description: "Full address in English (romanized Thai place names with Thai in parentheses)"
+      district:
+        type: string
+        description: "District/Amphoe - format: 'English (ไทย)' e.g. 'Hua Hin (หัวหิน)'"
+      province:
+        type: string
+        description: "Province - format: 'English (ไทย)' e.g. 'Prachuap Khiri Khan (ประจวบคีรีขันธ์)'"
+      subdistrict:
+        type: string
+        description: "Subdistrict/Tambon if shown - format: 'English (ไทย)'"
 
   - name: bedrooms
     type: integer
@@ -44,57 +104,89 @@ fields:
     type: integer
     description: "Number of bathrooms"
 
+  - name: area_sqm
+    type: number
+    description: "Usable/living area in square meters"
+
   - name: land_area_sqm
     type: number
-    description: "Land area in square meters if available"
+    description: "Land area in square meters (for houses/villas/land)"
 
   - name: land_area_rai
     type: number
-    description: "Land area in rai (Thai unit, 1 rai = 1600 sqm) if available"
-
-  - name: building_area_sqm
-    type: number
-    description: "Building/usable area in square meters"
+    description: "Land area in rai if shown (1 rai = 1600 sqm)"
 
   - name: property_type
     type: string
-    description: "Type of property: house, condo, land, villa, townhouse, etc."
+    description: "Type in English: Condo, House, Villa, Townhouse, Land, Apartment, Penthouse, Commercial"
 
   - name: listing_type
     type: string
-    description: "Sale or rent"
+    description: "Sale or Rent"
 
-  - name: status
+  - name: ownership
     type: string
-    description: "Listing status if shown (new, reduced, etc.)"
+    description: "Ownership type: Freehold, Leasehold, Foreign Freehold (if shown)"
+
+  - name: completion_status
+    type: string
+    description: "Off Plan, Under Construction, Completed, or Ready to Move In"
+
+  - name: year_built
+    type: integer
+    description: "Year completed (convert Thai Buddhist year to Gregorian: subtract 543)"
+
+  - name: furnishing
+    type: string
+    description: "Fully Furnished, Partially Furnished, Unfurnished"
 
   - name: description
     type: string
-    description: "Property description text (translate to English if in Thai)"
+    description: "Property description translated to English (max 1000 chars). If bilingual on page, use English version."
 
   - name: features
     type: array
-    description: "Key features of the property (pool, garden, parking, sea view, etc.)"
+    description: "Property features in English: pool, gym, security, parking, sea view, garden, etc."
+    items:
+      type: string
+
+  - name: facilities
+    type: array
+    description: "Building/project facilities in English: swimming pool, fitness, sauna, lobby, etc."
     items:
       type: string
 
   - name: nearby
     type: array
-    description: "Nearby amenities or landmarks mentioned"
+    description: "Nearby places in format 'Place Name (ชื่อไทย)' or just English if well-known"
     items:
       type: string
 
-  - name: agent_name
-    type: string
-    description: "Agent or developer name"
+  - name: agent
+    type: object
+    description: "Agent/seller information"
+    properties:
+      name:
+        type: string
+        description: "Agent or seller name"
+      phone:
+        type: string
+        description: "Phone number if displayed"
+      type:
+        type: string
+        description: "Agent, Developer, or Owner"
 
-  - name: agent_phone
+  - name: listing_id
     type: string
-    description: "Agent phone number if displayed"
+    description: "DDProperty listing ID number"
+
+  - name: listing_date
+    type: string
+    description: "Date listed in ISO format YYYY-MM-DD (convert Thai date if needed)"
 
   - name: images
     type: array
-    description: "URLs of property photos"
+    description: "URLs of property photos (first 10 only)"
     items:
       type: string
 

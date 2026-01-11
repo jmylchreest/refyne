@@ -35,6 +35,18 @@ task example:simplyrecipes:crawl -- "https://www.simplyrecipes.com/recipes-50907
   -o recipes.jsonl
 ```
 
+## Go SDK Usage
+
+```bash
+cd examples/simplyrecipes
+
+# Single recipe
+go run main.go "https://www.simplyrecipes.com/steak-tips-recipe-7972730"
+
+# Crawl recipe category
+go run main.go "https://www.simplyrecipes.com/dinner-recipes-5091433" "a[href*='-recipe-']"
+```
+
 ## Schema Fields
 
 ### Basic Info
