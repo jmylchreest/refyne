@@ -4,6 +4,7 @@ package extractor
 import (
 	"strings"
 
+	"github.com/refyne/refyne/internal/logger"
 	"github.com/refyne/refyne/pkg/schema"
 )
 
@@ -51,5 +52,9 @@ func truncateContent(content string, maxLen int) string {
 	if len(content) <= maxLen {
 		return content
 	}
+	logger.Warn("content truncated due to length",
+		"original_bytes", len(content),
+		"max_bytes", maxLen,
+		"truncated_bytes", len(content)-maxLen)
 	return content[:maxLen] + "\n\n[Content truncated due to length...]"
 }
