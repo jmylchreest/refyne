@@ -18,7 +18,8 @@ type Result struct {
 	URL             string
 	FetchedAt       time.Time
 	Data            any
-	Raw             string
+	Raw             string // Raw LLM response
+	RawContent      string // Raw page content sent to LLM (for training data)
 	Errors          []schema.ValidationError
 	TokenUsage      TokenUsage
 	Model           string        // Actual model used (may differ from requested for auto-routing)
@@ -103,10 +104,11 @@ func (r *Refyne) Extract(ctx context.Context, url string, s schema.Schema) (*Res
 	}
 
 	return &Result{
-		URL:       url,
-		FetchedAt: content.FetchedAt,
-		Data:      result.Data,
-		Raw:       result.Raw,
+		URL:        url,
+		FetchedAt:  content.FetchedAt,
+		Data:       result.Data,
+		Raw:        result.Raw,
+		RawContent: result.RawContent,
 		TokenUsage: TokenUsage{
 			InputTokens:  result.Usage.InputTokens,
 			OutputTokens: result.Usage.OutputTokens,
@@ -179,10 +181,11 @@ func (r *Refyne) CrawlMany(ctx context.Context, seeds []string, s schema.Schema,
 		defer close(results)
 		for cr := range crawlResults {
 			results <- &Result{
-				URL:       cr.URL,
-				FetchedAt: cr.FetchedAt,
-				Data:      cr.Data,
-				Raw:       cr.Raw,
+				URL:        cr.URL,
+				FetchedAt:  cr.FetchedAt,
+				Data:       cr.Data,
+				Raw:        cr.Raw,
+				RawContent: cr.Usage.RawContent,
 				TokenUsage: TokenUsage{
 					InputTokens:  cr.Usage.Usage.InputTokens,
 					OutputTokens: cr.Usage.Usage.OutputTokens,

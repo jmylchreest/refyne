@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"os/signal"
 	"syscall"
@@ -25,15 +26,22 @@ type wrappedResult struct {
 }
 
 type resultMetadata struct {
-	URL             string  `json:"url"`
-	FetchedAt       string  `json:"fetched_at"`
-	Model           string  `json:"model"`
-	Provider        string  `json:"provider"`
-	InputTokens     int     `json:"input_tokens"`
-	OutputTokens    int     `json:"output_tokens"`
-	FetchDurationMs int64   `json:"fetch_duration_ms"`
-	LLMDurationMs   int64   `json:"llm_duration_ms"`
-	RetryCount      int     `json:"retry_count,omitempty"`
+	URL             string `json:"url"`
+	FetchedAt       string `json:"fetched_at"`
+	Model           string `json:"model"`
+	Provider        string `json:"provider"`
+	InputTokens     int    `json:"input_tokens"`
+	OutputTokens    int    `json:"output_tokens"`
+	FetchDurationMs int64  `json:"fetch_duration_ms"`
+	LLMDurationMs   int64  `json:"llm_duration_ms"`
+	RetryCount      int    `json:"retry_count,omitempty"`
+}
+
+// trainingDataRecord is a single input/output pair for fine-tuning.
+type trainingDataRecord struct {
+	URL    string `json:"url"`
+	Input  string `json:"input"`  // Raw page content
+	Output any    `json:"output"` // Extracted JSON data
 }
 
 var scrapeCmd = &cobra.Command{
@@ -77,6 +85,7 @@ func init() {
 	flags.StringP("output", "o", "", "output file (default: stdout)")
 	flags.String("format", "json", "output format: json, jsonl, yaml")
 	flags.Bool("include-metadata", true, "wrap output with _metadata and data keys (use --include-metadata=false to disable)")
+	flags.String("save-training-data", "", "save input/output pairs for fine-tuning to this file (JSONL)")
 
 	// Fetch settings
 	flags.String("fetch-mode", "auto", "fetch mode: auto, static, dynamic")
@@ -213,6 +222,22 @@ func runScrape(cmd *cobra.Command, args []string) error {
 	// Get metadata option
 	includeMetadata, _ := cmd.Flags().GetBool("include-metadata")
 
+	// Setup training data output if requested
+	trainingDataPath, _ := cmd.Flags().GetString("save-training-data")
+	var trainingFile *os.File
+	var trainingEncoder *json.Encoder
+	if trainingDataPath != "" {
+		f, err := os.Create(trainingDataPath) //#nosec G304 -- CLI tool writes to user-specified file
+		if err != nil {
+			logger.Error("failed to create training data file", "path", trainingDataPath, "error", err)
+			return err
+		}
+		defer func() { _ = f.Close() }()
+		trainingFile = f
+		trainingEncoder = json.NewEncoder(trainingFile)
+		logger.Info("saving training data", "path", trainingDataPath)
+	}
+
 	// Get crawling options
 	followSelector, _ := cmd.Flags().GetString("follow")
 	followPattern, _ := cmd.Flags().GetString("follow-pattern")
@@ -292,6 +317,17 @@ func runScrape(cmd *cobra.Command, args []string) error {
 					logger.Error("failed to write output", "error", err)
 					return err
 				}
+				// Write training data if requested
+				if trainingEncoder != nil && result.RawContent != "" {
+					record := trainingDataRecord{
+						URL:    result.URL,
+						Input:  result.RawContent,
+						Output: result.Data,
+					}
+					if err := trainingEncoder.Encode(record); err != nil {
+						logger.Error("failed to write training data", "error", err)
+					}
+				}
 				count++
 			}
 		}
@@ -336,6 +372,17 @@ func runScrape(cmd *cobra.Command, args []string) error {
 			if err := writer.Write(out); err != nil {
 				logger.Error("failed to write output", "error", err)
 				return err
+			}
+			// Write training data if requested
+			if trainingEncoder != nil && result.RawContent != "" {
+				record := trainingDataRecord{
+					URL:    result.URL,
+					Input:  result.RawContent,
+					Output: result.Data,
+				}
+				if err := trainingEncoder.Encode(record); err != nil {
+					logger.Error("failed to write training data", "error", err)
+				}
 			}
 			count++
 		}

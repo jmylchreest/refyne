@@ -15,6 +15,7 @@ import (
 type ExtractionResult struct {
 	Data        any                      // Extracted structured data
 	Raw         string                   // Raw LLM response
+	RawContent  string                   // Raw input content sent to LLM (for training data)
 	Errors      []schema.ValidationError // Validation errors (if any)
 	Usage       llm.Usage                // Token usage
 	Model       string                   // Actual model used (may differ from requested)
@@ -212,8 +213,11 @@ func (e *Extractor) extractOnce(ctx context.Context, content string, s schema.Sc
 		"input_tokens", resp.Usage.InputTokens,
 		"output_tokens", resp.Usage.OutputTokens)
 
+	// Strip markdown code blocks if present (some models wrap JSON in ```json ... ```)
+	jsonContent := stripMarkdownCodeBlock(resp.Content)
+
 	// Parse response
-	data, err := s.Unmarshal([]byte(resp.Content))
+	data, err := s.Unmarshal([]byte(jsonContent))
 	if err != nil {
 		logger.Debug("extractor failed to parse response", "error", err)
 		return ExtractionResult{
@@ -224,11 +228,12 @@ func (e *Extractor) extractOnce(ctx context.Context, content string, s schema.Sc
 
 	logger.Debug("extractor response parsed successfully")
 	return ExtractionResult{
-		Data:     data,
-		Raw:      resp.Content,
-		Usage:    resp.Usage,
-		Model:    resp.Model,
-		Provider: e.provider.Name(),
+		Data:       data,
+		Raw:        resp.Content,
+		RawContent: content, // Original page content for training data
+		Usage:      resp.Usage,
+		Model:      resp.Model,
+		Provider:   e.provider.Name(),
 	}, nil
 }
 
@@ -280,4 +285,24 @@ func truncateForError(s string) string {
 		return s
 	}
 	return s[:200] + "..."
+}
+
+// stripMarkdownCodeBlock removes markdown code block wrappers from JSON responses.
+// Some models (e.g., DeepSeek) wrap their JSON output in ```json ... ``` blocks.
+func stripMarkdownCodeBlock(s string) string {
+	s = strings.TrimSpace(s)
+
+	// Check for ```json or ``` prefix
+	if strings.HasPrefix(s, "```json") {
+		s = strings.TrimPrefix(s, "```json")
+	} else if strings.HasPrefix(s, "```") {
+		s = strings.TrimPrefix(s, "```")
+	} else {
+		return s // No code block wrapper
+	}
+
+	// Remove trailing ```
+	s = strings.TrimSuffix(s, "```")
+
+	return strings.TrimSpace(s)
 }
