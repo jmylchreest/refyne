@@ -213,6 +213,8 @@ Flags:
       --format string     Output format: json, jsonl, yaml (default "json")
       --fetch-mode string Fetch mode: auto, static, dynamic (default "auto")
       --timeout duration  Request timeout (default 30s)
+      --max-retries int   Max extraction retries (default 3)
+      --max-content-size string  Max input content size (default "100KB", 0=unlimited)
       --debug             Enable debug logging
 
 Crawling:

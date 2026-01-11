@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
+	"github.com/dustin/go-humanize"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -93,6 +95,7 @@ func init() {
 
 	// Extraction settings
 	flags.Int("max-retries", 3, "max extraction retries")
+	flags.String("max-content-size", "100KB", "max input content size (e.g., 100KB, 1MB, 0=unlimited)")
 
 	// Crawling settings
 	flags.String("follow", "", "CSS selector for links to follow")
@@ -156,6 +159,19 @@ func runScrape(cmd *cobra.Command, args []string) error {
 	maxRetries, _ := cmd.Flags().GetInt("max-retries")
 	logger.Debug("max retries", "retries", maxRetries)
 
+	// Get max content size (0 or empty means unlimited)
+	maxContentSizeStr, _ := cmd.Flags().GetString("max-content-size")
+	var maxContentSize int
+	if strings.TrimSpace(maxContentSizeStr) != "" && maxContentSizeStr != "0" {
+		bytes, err := humanize.ParseBytes(maxContentSizeStr)
+		if err != nil {
+			logger.Error("invalid max-content-size", "value", maxContentSizeStr, "error", err)
+			return err
+		}
+		maxContentSize = int(bytes)
+	}
+	logger.Debug("max content size", "bytes", maxContentSize)
+
 	// Determine provider and model
 	// Priority: explicit flags > viper config > auto-detection
 	provider := viper.GetString("provider")
@@ -191,6 +207,7 @@ func runScrape(cmd *cobra.Command, args []string) error {
 		refyne.WithFetchMode(fetchMode),
 		refyne.WithTimeout(timeout),
 		refyne.WithMaxRetries(maxRetries),
+		refyne.WithMaxContentSize(maxContentSize),
 	)
 	if err != nil {
 		logger.Error("failed to initialize", "error", err)

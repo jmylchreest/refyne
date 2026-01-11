@@ -20,7 +20,7 @@ Rules:
 7. Be precise and extract exactly what is requested`
 
 // BuildExtractionPrompt creates the prompt for LLM extraction.
-func BuildExtractionPrompt(content string, s schema.Schema, previousErr error) string {
+func BuildExtractionPrompt(content string, s schema.Schema, previousErr error, maxContentSize int) string {
 	var prompt strings.Builder
 
 	prompt.WriteString("Extract structured data from the following webpage content.\n\n")
@@ -36,7 +36,7 @@ func BuildExtractionPrompt(content string, s schema.Schema, previousErr error) s
 
 	prompt.WriteString("\n## Webpage Content\n")
 	prompt.WriteString("```\n")
-	prompt.WriteString(truncateContent(content, 100000))
+	prompt.WriteString(truncateContent(content, maxContentSize))
 	prompt.WriteString("\n```\n")
 
 	return prompt.String()
@@ -48,8 +48,9 @@ func GetSystemPrompt() string {
 }
 
 // truncateContent limits content size to avoid token limits.
+// maxLen of 0 means no limit.
 func truncateContent(content string, maxLen int) string {
-	if len(content) <= maxLen {
+	if maxLen <= 0 || len(content) <= maxLen {
 		return content
 	}
 	logger.Warn("content truncated due to length",

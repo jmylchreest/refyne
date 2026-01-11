@@ -22,8 +22,9 @@ type Config struct {
 	Timeout   time.Duration
 
 	// Extraction settings
-	MaxRetries  int
-	Temperature float64
+	MaxRetries     int
+	Temperature    float64
+	MaxContentSize int // Max input content size in bytes (0 = default 100KB)
 
 	// Crawling settings
 	CrawlConfig crawler.Config
@@ -35,13 +36,14 @@ const defaultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/
 // DefaultConfig returns sensible defaults.
 func DefaultConfig() Config {
 	return Config{
-		Provider:    "anthropic",
-		FetchMode:   scraper.FetchModeAuto,
-		UserAgent:   defaultUserAgent,
-		Timeout:     30 * time.Second,
-		MaxRetries:  3,
-		Temperature: 0.1,
-		CrawlConfig: crawler.DefaultConfig(),
+		Provider:       "anthropic",
+		FetchMode:      scraper.FetchModeAuto,
+		UserAgent:      defaultUserAgent,
+		Timeout:        30 * time.Second,
+		MaxRetries:     3,
+		Temperature:    0.1,
+		MaxContentSize: 100000, // 100KB default (SI units)
+		CrawlConfig:    crawler.DefaultConfig(),
 	}
 }
 
@@ -108,6 +110,13 @@ func WithMaxRetries(n int) Option {
 func WithTemperature(t float64) Option {
 	return func(c *Config) {
 		c.Temperature = t
+	}
+}
+
+// WithMaxContentSize sets the maximum input content size in bytes.
+func WithMaxContentSize(n int) Option {
+	return func(c *Config) {
+		c.MaxContentSize = n
 	}
 }
 

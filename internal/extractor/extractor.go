@@ -32,18 +32,20 @@ type Extractor struct {
 
 // Config holds extractor settings.
 type Config struct {
-	MaxRetries  int
-	Temperature float64
-	MaxTokens   int
-	DebugMode   bool
+	MaxRetries     int
+	Temperature    float64
+	MaxTokens      int
+	MaxContentSize int // Max input content size in bytes (0 = default 100KB)
+	DebugMode      bool
 }
 
 // DefaultConfig returns sensible defaults.
 func DefaultConfig() Config {
 	return Config{
-		MaxRetries:  3,
-		Temperature: 0.1,
-		MaxTokens:   8192,
+		MaxRetries:     3,
+		Temperature:    0.1,
+		MaxTokens:      8192,
+		MaxContentSize: 100000, // ~25K tokens
 	}
 }
 
@@ -88,6 +90,14 @@ func WithMaxTokens(n int) Option {
 func WithDebugMode(enabled bool) Option {
 	return func(c *Config) {
 		c.DebugMode = enabled
+	}
+}
+
+// WithMaxContentSize sets the maximum input content size in bytes.
+// 0 means unlimited.
+func WithMaxContentSize(n int) Option {
+	return func(c *Config) {
+		c.MaxContentSize = n
 	}
 }
 
@@ -178,9 +188,10 @@ func (e *Extractor) Extract(ctx context.Context, content string, s schema.Schema
 // extractOnce performs a single extraction attempt.
 func (e *Extractor) extractOnce(ctx context.Context, content string, s schema.Schema, previousErr error) (ExtractionResult, error) {
 	logger.Debug("extractor building prompt",
-		"has_previous_error", previousErr != nil)
+		"has_previous_error", previousErr != nil,
+		"max_content_size", e.config.MaxContentSize)
 
-	prompt := BuildExtractionPrompt(content, s, previousErr)
+	prompt := BuildExtractionPrompt(content, s, previousErr, e.config.MaxContentSize)
 	logger.Debug("extractor prompt built", "prompt_size", len(prompt))
 
 	jsonSchema, err := s.ToJSONSchema()

@@ -74,6 +74,7 @@ func New(opts ...Option) (*Refyne, error) {
 	ext := extractor.New(provider,
 		extractor.WithMaxRetries(cfg.MaxRetries),
 		extractor.WithTemperature(cfg.Temperature),
+		extractor.WithMaxContentSize(cfg.MaxContentSize),
 	)
 
 	return &Refyne{
