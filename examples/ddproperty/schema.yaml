@@ -1,0 +1,103 @@
+name: DDPropertyListing
+description: |
+  A DDProperty Thailand property listing page. Extract property details including
+  price in Thai Baht, bedrooms, bathrooms, land area, and Thai-specific fields.
+  The page content is in Thai language.
+
+fields:
+  - name: title
+    type: string
+    description: "Property title or headline from the listing (may be in Thai)"
+    required: true
+
+  - name: price_thb
+    type: integer
+    description: "Listing price in Thai Baht (numeric value only, no currency symbol)"
+    required: true
+
+  - name: price_gbp_approx
+    type: integer
+    description: "Approximate price in GBP using rough conversion of 1 GBP = 45 THB"
+
+  - name: price_qualifier
+    type: string
+    description: "Price qualifier if present (e.g. 'negotiable', 'starting from')"
+
+  - name: address
+    type: string
+    description: "Property address or location description"
+    required: true
+
+  - name: province
+    type: string
+    description: "Thai province name (e.g. Krabi, Phuket, Bangkok)"
+
+  - name: district
+    type: string
+    description: "District or amphoe name"
+
+  - name: bedrooms
+    type: integer
+    description: "Number of bedrooms"
+
+  - name: bathrooms
+    type: integer
+    description: "Number of bathrooms"
+
+  - name: land_area_sqm
+    type: number
+    description: "Land area in square meters if available"
+
+  - name: land_area_rai
+    type: number
+    description: "Land area in rai (Thai unit, 1 rai = 1600 sqm) if available"
+
+  - name: building_area_sqm
+    type: number
+    description: "Building/usable area in square meters"
+
+  - name: property_type
+    type: string
+    description: "Type of property: house, condo, land, villa, townhouse, etc."
+
+  - name: listing_type
+    type: string
+    description: "Sale or rent"
+
+  - name: status
+    type: string
+    description: "Listing status if shown (new, reduced, etc.)"
+
+  - name: description
+    type: string
+    description: "Property description text (translate to English if in Thai)"
+
+  - name: features
+    type: array
+    description: "Key features of the property (pool, garden, parking, sea view, etc.)"
+    items:
+      type: string
+
+  - name: nearby
+    type: array
+    description: "Nearby amenities or landmarks mentioned"
+    items:
+      type: string
+
+  - name: agent_name
+    type: string
+    description: "Agent or developer name"
+
+  - name: agent_phone
+    type: string
+    description: "Agent phone number if displayed"
+
+  - name: images
+    type: array
+    description: "URLs of property photos"
+    items:
+      type: string
+
+  - name: url
+    type: string
+    description: "Full URL of the property listing"
