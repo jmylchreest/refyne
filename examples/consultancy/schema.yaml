@@ -1,0 +1,85 @@
+name: Consultancy
+description: |
+  A consultancy or professional services company website. Extract company
+  information, services offered, industries served, and notable clients
+  or case studies.
+
+fields:
+  - name: company_name
+    type: string
+    description: "The name of the consultancy firm"
+    required: true
+
+  - name: tagline
+    type: string
+    description: "Company tagline or value proposition"
+
+  - name: description
+    type: string
+    description: "Brief overview of what the company does"
+
+  - name: founded
+    type: string
+    description: "Year the company was founded or establishment date"
+
+  - name: team_size
+    type: string
+    description: "Number of employees or team size description"
+
+  - name: services
+    type: array
+    description: "List of services or capabilities offered"
+    required: true
+    items:
+      type: object
+      properties:
+        - name: name
+          type: string
+          description: "Service name or title"
+          required: true
+        - name: description
+          type: string
+          description: "Brief description of the service"
+
+  - name: industries
+    type: array
+    description: "Industries or sectors the consultancy serves"
+    items:
+      type: string
+
+  - name: clients
+    type: array
+    description: "Notable clients or case study companies"
+    items:
+      type: object
+      properties:
+        - name: name
+          type: string
+          description: "Client company name"
+          required: true
+        - name: industry
+          type: string
+          description: "Client's industry if mentioned"
+        - name: description
+          type: string
+          description: "Brief description of work done or testimonial"
+
+  - name: locations
+    type: array
+    description: "Office locations or regions served"
+    items:
+      type: string
+
+  - name: contact
+    type: object
+    description: "Contact information"
+    properties:
+      - name: email
+        type: string
+        description: "Contact email address"
+      - name: phone
+        type: string
+        description: "Phone number"
+      - name: address
+        type: string
+        description: "Physical address"

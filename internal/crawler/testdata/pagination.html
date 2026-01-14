@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Pagination Test Page</title>
+</head>
+<body>
+    <h1>Search Results - Page 2</h1>
+
+    <div class="results">
+        <div class="item">Result 11</div>
+        <div class="item">Result 12</div>
+        <div class="item">Result 13</div>
+    </div>
+
+    <nav class="pagination">
+        <a href="/search?page=1" class="prev">Previous</a>
+        <span class="current">2</span>
+        <a href="/search?page=3" class="next">Next</a>
+        <a href="/search?page=10" class="last">Last</a>
+    </nav>
+
+    <nav class="alt-pagination">
+        <a href="/results/page/1" rel="prev">Prev</a>
+        <a href="/results/page/3" rel="next">Next</a>
+    </nav>
+</body>
+</html>

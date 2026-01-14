@@ -36,6 +36,8 @@ func NewBaseLLMExtractor(name string, provider llm.Provider, cfg *LLMConfig) *Ba
 		if cfg.MaxContentSize > 0 {
 			config.MaxContentSize = cfg.MaxContentSize
 		}
+		// StrictMode is a bool, so always copy it (false is a valid setting)
+		config.StrictMode = cfg.StrictMode
 	}
 
 	return &BaseLLMExtractor{
@@ -143,7 +145,8 @@ func (e *BaseLLMExtractor) extractOnce(ctx context.Context, content string, s sc
 		"provider", e.provider.Name(),
 		"model", e.provider.Model(),
 		"max_tokens", e.config.MaxTokens,
-		"temperature", e.config.Temperature)
+		"temperature", e.config.Temperature,
+		"strict_mode", e.config.StrictMode)
 
 	resp, err := e.provider.Complete(ctx, llm.CompletionRequest{
 		Messages: []llm.Message{
@@ -153,6 +156,7 @@ func (e *BaseLLMExtractor) extractOnce(ctx context.Context, content string, s sc
 		MaxTokens:   e.config.MaxTokens,
 		Temperature: e.config.Temperature,
 		JSONSchema:  jsonSchema,
+		StrictMode:  e.config.StrictMode,
 	})
 	if err != nil {
 		logger.Debug("extractor LLM completion failed", "error", err)

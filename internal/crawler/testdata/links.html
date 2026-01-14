@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Links Test Page</title>
+</head>
+<body>
+    <h1>Test Links</h1>
+
+    <nav>
+        <a href="/">Home</a>
+        <a href="/about">About</a>
+    </nav>
+
+    <main>
+        <div class="listing">
+            <a href="/product/1" class="product-link">Product 1</a>
+            <a href="/product/2" class="product-link">Product 2</a>
+            <a href="/product/3" class="product-link">Product 3</a>
+        </div>
+
+        <div class="external">
+            <a href="https://external.example.com/page">External Link</a>
+        </div>
+
+        <div class="special">
+            <a href="#section">Fragment Only</a>
+            <a href="javascript:void(0)">JavaScript Link</a>
+            <a href="">Empty Href</a>
+            <a>No Href</a>
+        </div>
+
+        <div class="relative">
+            <a href="relative/path">Relative Path</a>
+            <a href="../parent/path">Parent Path</a>
+            <a href="./current/path">Current Path</a>
+        </div>
+
+        <div class="duplicates">
+            <a href="/product/1">Duplicate 1</a>
+            <a href="/product/1">Duplicate 2</a>
+        </div>
+    </main>
+</body>
+</html>

@@ -33,6 +33,7 @@ type CompletionRequest struct {
 	MaxTokens   int
 	Temperature float64
 	JSONSchema  map[string]any // For structured output
+	StrictMode  bool           // Use strict JSON schema validation (only for supported models)
 }
 
 // CompletionResponse represents the LLM response.

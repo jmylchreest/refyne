@@ -3,6 +3,7 @@ package refyne
 import (
 	"context"
 	"fmt"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -17,6 +18,16 @@ import (
 	"github.com/refyne/refyne/pkg/fetcher"
 	"github.com/refyne/refyne/pkg/schema"
 )
+
+// Version returns the module version of the refyne library.
+// This returns the actual version consumers pulled via go get (e.g., "v1.0.0").
+// Returns "(devel)" when built from source without version info.
+func Version() string {
+	if info, ok := debug.ReadBuildInfo(); ok {
+		return info.Main.Version
+	}
+	return "(unknown)"
+}
 
 // Result represents an extraction result.
 type Result struct {
@@ -87,6 +98,7 @@ func New(opts ...Option) (*Refyne, error) {
 			Temperature:    cfg.Temperature,
 			MaxRetries:     cfg.MaxRetries,
 			MaxContentSize: cfg.MaxContentSize,
+			StrictMode:     cfg.StrictMode,
 		}
 
 		var err error

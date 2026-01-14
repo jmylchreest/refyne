@@ -83,13 +83,15 @@ func (p *OpenAIProvider) Complete(ctx context.Context, req CompletionRequest) (C
 	}
 
 	// Use native JSON mode / structured outputs if schema provided
+	// StrictMode: Only enable for models that support it (OpenAI gpt-4o, gpt-4o-mini)
+	// Other models (Gemini, Llama, etc.) may return empty choices when strict=true
 	if req.JSONSchema != nil {
 		params.ResponseFormat = openai.ChatCompletionNewParamsResponseFormatUnion{
 			OfJSONSchema: &openai.ResponseFormatJSONSchemaParam{
 				JSONSchema: openai.ResponseFormatJSONSchemaJSONSchemaParam{
 					Name:   "extraction_result",
 					Schema: req.JSONSchema,
-					Strict: openai.Bool(true),
+					Strict: openai.Bool(req.StrictMode),
 				},
 			},
 		}

@@ -28,7 +28,8 @@ type Config struct {
 	// Extraction settings (used when Extractor is nil)
 	MaxRetries     int
 	Temperature    float64
-	MaxContentSize int // Max input content size in bytes (0 = default 100KB)
+	MaxContentSize int  // Max input content size in bytes (0 = default 100KB)
+	StrictMode     bool // Use strict JSON schema mode (only supported by some models)
 
 	// Crawling settings
 	CrawlConfig crawler.Config
@@ -113,6 +114,17 @@ func WithTemperature(t float64) Option {
 func WithMaxContentSize(n int) Option {
 	return func(c *Config) {
 		c.MaxContentSize = n
+	}
+}
+
+// WithStrictMode enables or disables strict JSON schema mode.
+// Only OpenAI and OpenAI-compatible models (gpt-4o, gpt-4o-mini) support strict mode.
+// When enabled, the model must return valid JSON matching the schema exactly.
+// When disabled (default), the model will try to follow the schema but may not be exact.
+// Set to false for models like Gemini, Llama, Claude that don't support strict mode.
+func WithStrictMode(strict bool) Option {
+	return func(c *Config) {
+		c.StrictMode = strict
 	}
 }
 

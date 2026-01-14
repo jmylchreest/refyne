@@ -28,6 +28,12 @@ type LLMConfig struct {
 
 	// MaxContentSize limits input content in bytes (default: 100000, 0 = unlimited).
 	MaxContentSize int
+
+	// StrictMode enables strict JSON schema validation in the API request.
+	// Only supported by OpenAI models (gpt-4o, gpt-4o-mini) and some OpenRouter models.
+	// When enabled, the model must return valid JSON exactly matching the schema.
+	// Default: false (for broader model compatibility).
+	StrictMode bool
 }
 
 // DefaultLLMConfig returns sensible defaults for LLM extraction.

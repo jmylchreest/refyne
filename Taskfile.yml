@@ -1,16 +1,45 @@
 version: '3'
 
 vars:
+  # Version calculation with fallbacks:
+  # 1. Exact tag match (e.g., v1.0.0 -> 1.0.0)
+  # 2. Commits ahead of tag (e.g., v1.0.0-5-gabc123 -> 1.0.1-dev.5+abc123)
+  # 3. No tags (e.g., 0.0.0-dev.0+abc123)
   VERSION:
-    sh: git describe --tags --always --dirty 2>/dev/null || echo "dev"
+    sh: |
+      if git describe --tags --exact-match >/dev/null 2>&1; then
+        git describe --tags --exact-match | sed 's/^v//'
+      elif git describe --tags >/dev/null 2>&1; then
+        DESC=$(git describe --tags 2>/dev/null)
+        BASE=$(echo "$DESC" | sed -E 's/^v?([0-9]+\.[0-9]+\.[0-9]+).*/\1/')
+        MAJOR=$(echo "$BASE" | cut -d. -f1)
+        MINOR=$(echo "$BASE" | cut -d. -f2)
+        PATCH=$(echo "$BASE" | cut -d. -f3)
+        COUNT=$(echo "$DESC" | sed -E 's/.*-([0-9]+)-g[a-f0-9]+$/\1/')
+        SHA=$(git rev-parse --short HEAD 2>/dev/null)
+        NEXT_PATCH=$((PATCH + 1))
+        echo "${MAJOR}.${MINOR}.${NEXT_PATCH}-dev.${COUNT}+${SHA}"
+      else
+        SHA=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+        echo "0.0.0-dev.0+${SHA}"
+      fi
   COMMIT:
     sh: git rev-parse --short HEAD 2>/dev/null || echo "unknown"
+  DIRTY:
+    sh: |
+      if git diff --quiet 2>/dev/null && git diff --cached --quiet 2>/dev/null; then
+        echo "false"
+      else
+        echo "true"
+      fi
   BUILD_DATE:
     sh: date -u +"%Y-%m-%dT%H:%M:%SZ"
   LDFLAGS: >-
-    -X github.com/refyne/refyne/cmd/refyne/commands.Version={{.VERSION}}
-    -X github.com/refyne/refyne/cmd/refyne/commands.Commit={{.COMMIT}}
-    -X github.com/refyne/refyne/cmd/refyne/commands.BuildDate={{.BUILD_DATE}}
+    -s -w
+    -X github.com/refyne/refyne/internal/version.Version={{.VERSION}}
+    -X github.com/refyne/refyne/internal/version.Commit={{.COMMIT}}
+    -X github.com/refyne/refyne/internal/version.Dirty={{.DIRTY}}
+    -X github.com/refyne/refyne/internal/version.BuildDate={{.BUILD_DATE}}
 
 tasks:
   default:
