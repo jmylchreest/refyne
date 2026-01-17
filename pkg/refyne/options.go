@@ -2,9 +2,12 @@
 package refyne
 
 import (
+	"io"
+	"log/slog"
 	"time"
 
 	"github.com/refyne/refyne/internal/crawler"
+	"github.com/refyne/refyne/internal/logger"
 	"github.com/refyne/refyne/pkg/cleaner"
 	"github.com/refyne/refyne/pkg/extractor"
 	"github.com/refyne/refyne/pkg/fetcher"
@@ -158,6 +161,16 @@ func WithExtractor(ext extractor.Extractor) Option {
 	}
 }
 
+// WithLogger sets a custom slog.Logger for the refyne library.
+// Note: Due to refyne's internal architecture, this sets a global logger
+// that affects all refyne instances. For most use cases, call this once
+// at startup when creating your first Refyne instance.
+func WithLogger(l *slog.Logger) Option {
+	return func(c *Config) {
+		logger.SetLogger(l)
+	}
+}
+
 // CrawlOption configures crawling behavior.
 type CrawlOption func(*crawler.Config)
 
@@ -229,4 +242,40 @@ func WithExtractFromSeeds(enabled bool) CrawlOption {
 	return func(c *crawler.Config) {
 		c.ExtractFromSeeds = enabled
 	}
+}
+
+// WithOnURLsQueued sets a callback for when URLs are queued.
+// The callback receives the total number of URLs queued (including already processed).
+// Use this for progress tracking when the total URL count is not known upfront.
+func WithOnURLsQueued(fn func(count int)) CrawlOption {
+	return func(c *crawler.Config) {
+		c.OnURLsQueued = fn
+	}
+}
+
+// SetLogger sets a custom slog.Logger for the refyne library.
+// This allows refyne logs to be integrated with your application's logging system.
+// Call this once at application startup before creating any Refyne instances.
+func SetLogger(l *slog.Logger) {
+	logger.SetLogger(l)
+}
+
+// SetDebugLogging enables or disables debug-level logging for the refyne library.
+// This is a global setting that affects all refyne instances.
+// Call this once at application startup if you want verbose crawler logs.
+func SetDebugLogging(enabled bool) {
+	logger.Init(logger.Options{
+		Debug: enabled,
+	})
+}
+
+// SetLogOutput configures the refyne logger output destination and options.
+// Use this to redirect refyne logs to a custom writer (e.g., to integrate with
+// your application's logging system).
+func SetLogOutput(output io.Writer, debug bool, jsonFormat bool) {
+	logger.Init(logger.Options{
+		Debug:  debug,
+		JSON:   jsonFormat,
+		Output: output,
+	})
 }

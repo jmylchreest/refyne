@@ -23,7 +23,8 @@ type LLMConfig struct {
 	// MaxTokens for LLM responses (default: 8192).
 	MaxTokens int
 
-	// MaxRetries for failed extractions (default: 3).
+	// MaxRetries for rate limit errors only (default: 1).
+	// Other errors (JSON parse, validation) are not retried.
 	MaxRetries int
 
 	// MaxContentSize limits input content in bytes (default: 100000, 0 = unlimited).
@@ -41,7 +42,7 @@ func DefaultLLMConfig() LLMConfig {
 	return LLMConfig{
 		Temperature:    0.1,
 		MaxTokens:      8192,
-		MaxRetries:     3,
+		MaxRetries:     1, // Only retry rate limits, not JSON/validation errors
 		MaxContentSize: 100000, // ~100KB
 	}
 }

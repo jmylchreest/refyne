@@ -40,6 +40,7 @@ type Result struct {
 	TokenUsage      TokenUsage
 	Model           string        // Actual model used (may differ from requested for auto-routing)
 	Provider        string        // Provider name (anthropic, openai, openrouter, ollama)
+	GenerationID    string        // Provider's generation ID (for cost tracking, e.g., OpenRouter)
 	RetryCount      int
 	FetchDuration   time.Duration // Time to fetch the page
 	ExtractDuration time.Duration // Time for LLM extraction
@@ -180,6 +181,7 @@ func (r *Refyne) Extract(ctx context.Context, url string, s schema.Schema) (*Res
 		},
 		Model:           result.Model,
 		Provider:        result.Provider,
+		GenerationID:    result.GenerationID,
 		RetryCount:      result.RetryCount,
 		FetchDuration:   fetchDuration,
 		ExtractDuration: result.Duration,
@@ -264,6 +266,7 @@ func (r *Refyne) CrawlMany(ctx context.Context, seeds []string, s schema.Schema,
 				}
 				result.Model = cr.Usage.Model
 				result.Provider = cr.Usage.Provider
+				result.GenerationID = cr.Usage.GenerationID
 				result.RetryCount = cr.Usage.RetryCount
 			}
 			results <- result

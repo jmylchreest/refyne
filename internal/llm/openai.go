@@ -114,6 +114,7 @@ func (p *OpenAIProvider) Complete(ctx context.Context, req CompletionRequest) (C
 			OutputTokens: int(resp.Usage.CompletionTokens),
 		},
 		Model: resp.Model,
+		ID:    resp.ID, // Generation ID for cost tracking (OpenRouter)
 	}, nil
 }
 

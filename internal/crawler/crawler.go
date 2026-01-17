@@ -48,6 +48,9 @@ type Config struct {
 
 	// Extraction
 	ExtractFromSeeds bool // Whether to extract from seed pages (vs just follow links)
+
+	// Callbacks
+	OnURLsQueued func(count int) // Called when URLs are queued (for progress tracking)
 }
 
 // DefaultConfig returns sensible crawler defaults.
@@ -104,11 +107,6 @@ func (c *Crawler) crawl(ctx context.Context, seeds []string, s schema.Schema, re
 		"concurrency", c.config.Concurrency,
 		"delay", c.config.Delay)
 
-	// Log seed URLs at Info level
-	for _, seed := range seeds {
-		logger.Info("seed", "url", seed)
-	}
-
 	queue := NewURLQueue()
 	var linkSelector *LinkSelector
 	var paginationSelector *PaginationSelector
@@ -137,6 +135,11 @@ func (c *Crawler) crawl(ctx context.Context, seeds []string, s schema.Schema, re
 	for _, seed := range seeds {
 		logger.Debug("crawler adding seed URL", "url", seed)
 		queue.Add(seed, 0)
+	}
+
+	// Notify about initial queued URLs
+	if c.config.OnURLsQueued != nil {
+		c.config.OnURLsQueued(queue.TotalQueued())
 	}
 
 	// Track processed URLs
@@ -287,12 +290,11 @@ func (c *Crawler) processURL(
 		} else {
 			logger.Debug("crawler extraction complete",
 				"url", url,
-				"validation_errors", len(extractResult.Errors))
-			logger.Info("extracted",
-				"url", url,
 				"fetch", fetchDuration.Round(time.Millisecond),
 				"llm", extractResult.Duration.Round(time.Millisecond),
-				"tokens", extractResult.Usage.InputTokens+extractResult.Usage.OutputTokens)
+				"input_tokens", extractResult.Usage.InputTokens,
+				"output_tokens", extractResult.Usage.OutputTokens,
+				"validation_errors", len(extractResult.Errors))
 			results <- Result{
 				URL:             url,
 				Depth:           depth,
@@ -306,7 +308,7 @@ func (c *Crawler) processURL(
 			}
 		}
 	} else {
-		logger.Info("fetched (no extraction)", "url", url, "fetch", fetchDuration.Round(time.Millisecond), "links", len(content.Links))
+		logger.Debug("fetched (no extraction)", "url", url, "fetch", fetchDuration.Round(time.Millisecond), "links", len(content.Links))
 	}
 
 	// Follow links if configured and within depth limit
@@ -330,6 +332,10 @@ func (c *Crawler) processURL(
 			}
 			if addedCount > 0 {
 				logger.Info("following links", "from", url, "count", addedCount)
+				// Notify about newly queued URLs
+				if c.config.OnURLsQueued != nil {
+					c.config.OnURLsQueued(queue.TotalQueued())
+				}
 			}
 		} else {
 			logger.Debug("crawler link extraction failed", "url", url, "error", err)
@@ -342,7 +348,9 @@ func (c *Crawler) processURL(
 			logger.Debug("crawler found next page", "next_url", nextURL)
 			logger.Info("pagination", "next", nextURL)
 			// Pagination stays at depth 0
-			queue.Add(nextURL, 0)
+			if queue.Add(nextURL, 0) && c.config.OnURLsQueued != nil {
+				c.config.OnURLsQueued(queue.TotalQueued())
+			}
 		}
 	}
 

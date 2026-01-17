@@ -183,6 +183,9 @@ func (e *BaseLLMExtractor) extractOnce(ctx context.Context, content string, s sc
 				InputTokens:  resp.Usage.InputTokens,
 				OutputTokens: resp.Usage.OutputTokens,
 			},
+			Model:        resp.Model,
+			Provider:     e.name,
+			GenerationID: resp.ID,
 		}, fmt.Errorf("failed to parse response as JSON: %w (response: %s)", err, truncateForError(resp.Content))
 	}
 
@@ -195,8 +198,9 @@ func (e *BaseLLMExtractor) extractOnce(ctx context.Context, content string, s sc
 			InputTokens:  resp.Usage.InputTokens,
 			OutputTokens: resp.Usage.OutputTokens,
 		},
-		Model:    resp.Model,
-		Provider: e.name,
+		Model:        resp.Model,
+		Provider:     e.name,
+		GenerationID: resp.ID,
 	}, nil
 }
 
@@ -223,23 +227,26 @@ func (e *validationError) Error() string {
 }
 
 // isRetryable determines if an error should trigger a retry.
+// Only transient errors (rate limits) are retryable.
+// JSON parse errors and validation errors are NOT retried - if the model
+// can't produce valid output, retrying wastes time and tokens.
+// The caller should use a fallback chain for model failures instead.
 func isRetryable(err error) bool {
 	if err == nil {
 		return false
 	}
 
-	if _, ok := err.(*validationError); ok {
-		return true
-	}
-
 	errStr := err.Error()
-	if strings.Contains(errStr, "failed to parse") {
-		return true
-	}
+
+	// Only retry rate limits - these are transient
 	if strings.Contains(errStr, "rate limit") || strings.Contains(errStr, "429") {
 		return true
 	}
 
+	// Don't retry:
+	// - JSON parse errors (model can't produce valid JSON)
+	// - Validation errors (model output doesn't match schema)
+	// - Other errors (auth, network, etc.)
 	return false
 }
 

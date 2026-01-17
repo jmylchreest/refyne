@@ -16,8 +16,12 @@ type LinkSelector struct {
 
 // NewLinkSelector creates a link selector.
 func NewLinkSelector(cssSelector string, urlPattern string) (*LinkSelector, error) {
+	// Normalize CSS selector: convert newlines to commas for goquery compatibility
+	// Users can provide selectors as "a.foo\nb.bar" or "a.foo, b.bar"
+	normalizedSelector := normalizeCSSSelector(cssSelector)
+
 	ls := &LinkSelector{
-		CSSSelector: cssSelector,
+		CSSSelector: normalizedSelector,
 	}
 
 	if urlPattern != "" {
@@ -29,6 +33,25 @@ func NewLinkSelector(cssSelector string, urlPattern string) (*LinkSelector, erro
 	}
 
 	return ls, nil
+}
+
+// normalizeCSSSelector converts newline-separated selectors to comma-separated.
+// goquery expects comma-separated CSS selectors like "a.foo, b.bar".
+func normalizeCSSSelector(selector string) string {
+	if selector == "" {
+		return selector
+	}
+
+	// Split by newlines, trim whitespace, filter empty, rejoin with commas
+	lines := strings.Split(selector, "\n")
+	var parts []string
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed != "" {
+			parts = append(parts, trimmed)
+		}
+	}
+	return strings.Join(parts, ", ")
 }
 
 // ExtractLinks extracts matching links from HTML content.

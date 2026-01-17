@@ -68,6 +68,13 @@ func (q *URLQueue) Len() int {
 	return len(q.queue)
 }
 
+// TotalQueued returns the total number of URLs ever queued (including processed).
+func (q *URLQueue) TotalQueued() int {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return len(q.visited)
+}
+
 // IsVisited checks if a URL has been visited.
 func (q *URLQueue) IsVisited(rawURL string) bool {
 	q.mu.Lock()

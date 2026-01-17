@@ -45,6 +45,10 @@ type Result struct {
 	// Provider is the provider/extractor name.
 	Provider string
 
+	// GenerationID is the provider's generation/request ID (for cost tracking).
+	// Available from OpenRouter and some other providers.
+	GenerationID string
+
 	// RetryCount is the number of retries performed.
 	RetryCount int
 

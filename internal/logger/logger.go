@@ -26,6 +26,12 @@ func Init(opts Options) {
 	mu.Lock()
 	defer mu.Unlock()
 
+	// If a custom logger is provided, use it directly
+	if opts.Logger != nil {
+		defaultLogger = opts.Logger
+		return
+	}
+
 	level := slog.LevelInfo
 	if opts.Debug {
 		level = slog.LevelDebug
@@ -53,12 +59,21 @@ func Init(opts Options) {
 	defaultLogger = slog.New(handler)
 }
 
+// SetLogger sets a custom slog.Logger to be used by refyne.
+// This allows integration with your application's existing logging system.
+func SetLogger(l *slog.Logger) {
+	mu.Lock()
+	defer mu.Unlock()
+	defaultLogger = l
+}
+
 // Options configures the logger.
 type Options struct {
-	Debug  bool      // Enable debug level logging
-	Quiet  bool      // Only show errors
-	JSON   bool      // Output as JSON
-	Output io.Writer // Output destination (default: stderr)
+	Debug  bool         // Enable debug level logging
+	Quiet  bool         // Only show errors
+	JSON   bool         // Output as JSON
+	Output io.Writer    // Output destination (default: stderr)
+	Logger *slog.Logger // Custom logger (overrides all other options)
 }
 
 // Debug logs a debug message.

@@ -42,6 +42,7 @@ type CompletionResponse struct {
 	FinishReason string
 	Usage        Usage
 	Model        string // Actual model used (may differ from requested for auto-routing)
+	ID           string // Generation ID (for OpenRouter cost tracking)
 }
 
 // Provider is the core abstraction over LLM backends.
