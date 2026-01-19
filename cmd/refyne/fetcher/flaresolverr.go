@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/refyne/refyne/internal/logger"
-	"github.com/refyne/refyne/pkg/fetcher"
+	"github.com/jmylchreest/refyne/internal/logger"
+	"github.com/jmylchreest/refyne/pkg/fetcher"
 )
 
 // ErrFlareSolverrUnavailable indicates FlareSolverr service is not reachable.

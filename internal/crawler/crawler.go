@@ -6,11 +6,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/refyne/refyne/internal/logger"
-	"github.com/refyne/refyne/pkg/cleaner"
-	"github.com/refyne/refyne/pkg/extractor"
-	"github.com/refyne/refyne/pkg/fetcher"
-	"github.com/refyne/refyne/pkg/schema"
+	"github.com/jmylchreest/refyne/internal/logger"
+	"github.com/jmylchreest/refyne/pkg/cleaner"
+	"github.com/jmylchreest/refyne/pkg/extractor"
+	"github.com/jmylchreest/refyne/pkg/fetcher"
+	"github.com/jmylchreest/refyne/pkg/schema"
 )
 
 // Result represents a single crawl/extraction result.

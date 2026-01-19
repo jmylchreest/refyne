@@ -4,7 +4,7 @@ package main
 import (
 	"os"
 
-	"github.com/refyne/refyne/cmd/refyne/commands"
+	"github.com/jmylchreest/refyne/cmd/refyne/commands"
 )
 
 func main() {

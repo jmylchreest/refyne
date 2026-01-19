@@ -17,8 +17,9 @@ func (s Schema) ToJSONSchema() (map[string]any, error) {
 	}
 
 	schema := map[string]any{
-		"type":       "object",
-		"properties": properties,
+		"type":                 "object",
+		"properties":           properties,
+		"additionalProperties": false, // Required for strict mode (OpenRouter/OpenAI)
 	}
 
 	if len(required) > 0 {
@@ -66,6 +67,7 @@ func fieldToJSONSchema(f Field) map[string]any {
 			}
 		}
 		schema["properties"] = props
+		schema["additionalProperties"] = false // Required for strict mode
 		if len(req) > 0 {
 			schema["required"] = req
 		}

@@ -9,7 +9,7 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/gocolly/colly/v2"
-	"github.com/refyne/refyne/internal/logger"
+	"github.com/jmylchreest/refyne/internal/logger"
 )
 
 // StaticConfig holds configuration for the static fetcher.

@@ -1,4 +1,4 @@
-module github.com/refyne/refyne
+module github.com/jmylchreest/refyne
 
 go 1.25.5
 

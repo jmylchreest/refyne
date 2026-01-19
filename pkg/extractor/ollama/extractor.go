@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/refyne/refyne/internal/llm"
-	"github.com/refyne/refyne/pkg/extractor"
+	"github.com/jmylchreest/refyne/pkg/llm"
+	"github.com/jmylchreest/refyne/pkg/extractor"
 )
 
 // DefaultModel is the default Ollama model.

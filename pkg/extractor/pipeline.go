@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/refyne/refyne/pkg/schema"
+	"github.com/jmylchreest/refyne/pkg/schema"
 )
 
 // PipelineExtractor runs extractors in sequence, passing results through.

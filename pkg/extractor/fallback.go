@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/refyne/refyne/pkg/schema"
+	"github.com/jmylchreest/refyne/pkg/schema"
 )
 
 // ErrNoExtractorAvailable is returned when no extractors in the fallback chain are available.

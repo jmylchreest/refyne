@@ -8,8 +8,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/refyne/refyne/pkg/refyne"
-	"github.com/refyne/refyne/pkg/schema"
+	"github.com/jmylchreest/refyne/pkg/refyne"
+	"github.com/jmylchreest/refyne/pkg/schema"
 )
 
 // PropertyListing represents a real estate listing.

@@ -2,7 +2,7 @@
 //
 // Variables in this package are set at build time using ldflags:
 //
-//	go build -ldflags "-X github.com/refyne/refyne/internal/version.Version=1.0.0 ..."
+//	go build -ldflags "-X github.com/jmylchreest/refyne/internal/version.Version=1.0.0 ..."
 //
 // For library consumers, the module version is determined by the go.mod
 // and git tags (e.g., v1.0.0). This package exposes CLI build metadata.

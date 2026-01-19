@@ -7,16 +7,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/refyne/refyne/internal/crawler"
-	"github.com/refyne/refyne/internal/logger"
-	"github.com/refyne/refyne/pkg/cleaner"
-	"github.com/refyne/refyne/pkg/extractor"
-	"github.com/refyne/refyne/pkg/extractor/anthropic"
-	"github.com/refyne/refyne/pkg/extractor/ollama"
-	"github.com/refyne/refyne/pkg/extractor/openai"
-	"github.com/refyne/refyne/pkg/extractor/openrouter"
-	"github.com/refyne/refyne/pkg/fetcher"
-	"github.com/refyne/refyne/pkg/schema"
+	"github.com/jmylchreest/refyne/internal/crawler"
+	"github.com/jmylchreest/refyne/internal/logger"
+	"github.com/jmylchreest/refyne/pkg/cleaner"
+	"github.com/jmylchreest/refyne/pkg/extractor"
+	"github.com/jmylchreest/refyne/pkg/extractor/anthropic"
+	"github.com/jmylchreest/refyne/pkg/extractor/ollama"
+	"github.com/jmylchreest/refyne/pkg/extractor/openai"
+	"github.com/jmylchreest/refyne/pkg/extractor/openrouter"
+	"github.com/jmylchreest/refyne/pkg/fetcher"
+	"github.com/jmylchreest/refyne/pkg/schema"
 )
 
 // Version returns the module version of the refyne library.
@@ -41,6 +41,8 @@ type Result struct {
 	Model           string        // Actual model used (may differ from requested for auto-routing)
 	Provider        string        // Provider name (anthropic, openai, openrouter, ollama)
 	GenerationID    string        // Provider's generation ID (for cost tracking, e.g., OpenRouter)
+	Cost            float64       // Actual cost in USD if provider returns it inline (check CostIncluded)
+	CostIncluded    bool          // True if Cost contains actual cost from provider
 	RetryCount      int
 	FetchDuration   time.Duration // Time to fetch the page
 	ExtractDuration time.Duration // Time for LLM extraction
@@ -182,6 +184,8 @@ func (r *Refyne) Extract(ctx context.Context, url string, s schema.Schema) (*Res
 		Model:           result.Model,
 		Provider:        result.Provider,
 		GenerationID:    result.GenerationID,
+		Cost:            result.Cost,
+		CostIncluded:    result.CostIncluded,
 		RetryCount:      result.RetryCount,
 		FetchDuration:   fetchDuration,
 		ExtractDuration: result.Duration,
@@ -267,6 +271,8 @@ func (r *Refyne) CrawlMany(ctx context.Context, seeds []string, s schema.Schema,
 				result.Model = cr.Usage.Model
 				result.Provider = cr.Usage.Provider
 				result.GenerationID = cr.Usage.GenerationID
+				result.Cost = cr.Usage.Cost
+				result.CostIncluded = cr.Usage.CostIncluded
 				result.RetryCount = cr.Usage.RetryCount
 			}
 			results <- result

@@ -36,10 +36,10 @@ vars:
     sh: date -u +"%Y-%m-%dT%H:%M:%SZ"
   LDFLAGS: >-
     -s -w
-    -X github.com/refyne/refyne/internal/version.Version={{.VERSION}}
-    -X github.com/refyne/refyne/internal/version.Commit={{.COMMIT}}
-    -X github.com/refyne/refyne/internal/version.Dirty={{.DIRTY}}
-    -X github.com/refyne/refyne/internal/version.BuildDate={{.BUILD_DATE}}
+    -X github.com/jmylchreest/refyne/internal/version.Version={{.VERSION}}
+    -X github.com/jmylchreest/refyne/internal/version.Commit={{.COMMIT}}
+    -X github.com/jmylchreest/refyne/internal/version.Dirty={{.DIRTY}}
+    -X github.com/jmylchreest/refyne/internal/version.BuildDate={{.BUILD_DATE}}
 
 tasks:
   default:

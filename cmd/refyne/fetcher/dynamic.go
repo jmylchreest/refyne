@@ -14,8 +14,8 @@ import (
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
 
-	"github.com/refyne/refyne/internal/logger"
-	"github.com/refyne/refyne/pkg/fetcher"
+	"github.com/jmylchreest/refyne/internal/logger"
+	"github.com/jmylchreest/refyne/pkg/fetcher"
 )
 
 // DynamicFetcher uses chromedp for JavaScript-rendered pages.

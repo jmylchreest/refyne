@@ -3,7 +3,7 @@ package fetcher
 import (
 	"os/exec"
 
-	"github.com/refyne/refyne/internal/logger"
+	"github.com/jmylchreest/refyne/internal/logger"
 )
 
 // Common Chrome/Chromium binary names across different systems

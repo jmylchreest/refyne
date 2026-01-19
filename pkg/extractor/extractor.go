@@ -5,7 +5,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/refyne/refyne/pkg/schema"
+	"github.com/jmylchreest/refyne/pkg/schema"
 )
 
 // Extractor extracts structured data from content.
@@ -54,6 +54,14 @@ type Result struct {
 
 	// Duration is the total time spent extracting.
 	Duration time.Duration
+
+	// Cost is the actual cost in USD if the provider returns it inline.
+	// Check CostIncluded to determine if this value is valid.
+	Cost float64
+
+	// CostIncluded is true if the Cost field contains actual cost from the provider.
+	// When false, cost must be looked up via GenerationID or estimated.
+	CostIncluded bool
 }
 
 // Usage tracks token consumption for LLM-based extractors.

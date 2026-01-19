@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/refyne/refyne/internal/llm"
-	"github.com/refyne/refyne/internal/logger"
-	"github.com/refyne/refyne/pkg/schema"
+	"github.com/jmylchreest/refyne/pkg/llm"
+	"github.com/jmylchreest/refyne/internal/logger"
+	"github.com/jmylchreest/refyne/pkg/schema"
 )
 
 // BaseLLMExtractor provides common extraction logic for LLM-based extractors.
@@ -148,7 +148,7 @@ func (e *BaseLLMExtractor) extractOnce(ctx context.Context, content string, s sc
 		"temperature", e.config.Temperature,
 		"strict_mode", e.config.StrictMode)
 
-	resp, err := e.provider.Complete(ctx, llm.CompletionRequest{
+	resp, err := e.provider.Execute(ctx, llm.Request{
 		Messages: []llm.Message{
 			{Role: llm.RoleSystem, Content: SystemPrompt},
 			{Role: llm.RoleUser, Content: prompt},
@@ -185,7 +185,9 @@ func (e *BaseLLMExtractor) extractOnce(ctx context.Context, content string, s sc
 			},
 			Model:        resp.Model,
 			Provider:     e.name,
-			GenerationID: resp.ID,
+			GenerationID: resp.GenerationID,
+			Cost:         resp.Cost,
+			CostIncluded: resp.CostIncluded,
 		}, fmt.Errorf("failed to parse response as JSON: %w (response: %s)", err, truncateForError(resp.Content))
 	}
 
@@ -200,7 +202,9 @@ func (e *BaseLLMExtractor) extractOnce(ctx context.Context, content string, s sc
 		},
 		Model:        resp.Model,
 		Provider:     e.name,
-		GenerationID: resp.ID,
+		GenerationID: resp.GenerationID,
+		Cost:         resp.Cost,
+		CostIncluded: resp.CostIncluded,
 	}, nil
 }
 

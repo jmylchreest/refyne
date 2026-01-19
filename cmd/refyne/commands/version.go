@@ -3,7 +3,7 @@ package commands
 import (
 	"fmt"
 
-	"github.com/refyne/refyne/internal/version"
+	"github.com/jmylchreest/refyne/internal/version"
 	"github.com/spf13/cobra"
 )
 

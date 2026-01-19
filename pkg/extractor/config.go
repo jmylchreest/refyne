@@ -3,7 +3,7 @@ package extractor
 import (
 	"strings"
 
-	"github.com/refyne/refyne/pkg/schema"
+	"github.com/jmylchreest/refyne/pkg/schema"
 )
 
 // LLMConfig holds shared configuration for LLM-based extractors.

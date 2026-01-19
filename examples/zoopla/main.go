@@ -9,9 +9,9 @@ import (
 	"os"
 	"time"
 
-	clifetcher "github.com/refyne/refyne/cmd/refyne/fetcher"
-	"github.com/refyne/refyne/pkg/refyne"
-	"github.com/refyne/refyne/pkg/schema"
+	clifetcher "github.com/jmylchreest/refyne/cmd/refyne/fetcher"
+	"github.com/jmylchreest/refyne/pkg/refyne"
+	"github.com/jmylchreest/refyne/pkg/schema"
 )
 
 // ZooplaListing represents a UK property listing from Zoopla.

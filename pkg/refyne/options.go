@@ -6,11 +6,11 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/refyne/refyne/internal/crawler"
-	"github.com/refyne/refyne/internal/logger"
-	"github.com/refyne/refyne/pkg/cleaner"
-	"github.com/refyne/refyne/pkg/extractor"
-	"github.com/refyne/refyne/pkg/fetcher"
+	"github.com/jmylchreest/refyne/internal/crawler"
+	"github.com/jmylchreest/refyne/internal/logger"
+	"github.com/jmylchreest/refyne/pkg/cleaner"
+	"github.com/jmylchreest/refyne/pkg/extractor"
+	"github.com/jmylchreest/refyne/pkg/fetcher"
 )
 
 // Config holds all Refyne configuration.

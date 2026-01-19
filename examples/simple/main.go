@@ -8,8 +8,8 @@ import (
 	"log"
 	"os"
 
-	"github.com/refyne/refyne/pkg/refyne"
-	"github.com/refyne/refyne/pkg/schema"
+	"github.com/jmylchreest/refyne/pkg/refyne"
+	"github.com/jmylchreest/refyne/pkg/schema"
 )
 
 // WebPage represents basic information extracted from any webpage.
