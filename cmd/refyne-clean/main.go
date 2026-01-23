@@ -43,7 +43,7 @@ var (
 	fileInput = flag.String("f", "", "Read HTML from file instead of URL")
 
 	// Config options
-	preset       = flag.String("preset", "", "Use preset: minimal, aggressive, ecommerce, recipe")
+	preset       = flag.String("preset", "", "Use preset: minimal, aggressive")
 	remove       = flag.String("remove", "", "Comma-separated selectors to remove")
 	keep         = flag.String("keep", "", "Comma-separated selectors to keep")
 	outputFormat = flag.String("format", "html", "Output format: html, text")
@@ -174,10 +174,6 @@ func buildConfig() *refyne.Config {
 		cfg = refyne.PresetMinimal()
 	case "aggressive":
 		cfg = refyne.PresetAggressive()
-	case "ecommerce":
-		cfg = refyne.PresetEcommerce()
-	case "recipe":
-		cfg = refyne.PresetRecipe()
 	default:
 		cfg = refyne.DefaultConfig()
 	}
@@ -288,8 +284,6 @@ func runComparison(html string, source string) {
 		{"default", refyne.DefaultConfig()},
 		{"minimal", refyne.PresetMinimal()},
 		{"aggressive", refyne.PresetAggressive()},
-		{"ecommerce", refyne.PresetEcommerce()},
-		{"recipe", refyne.PresetRecipe()},
 	}
 
 	fmt.Printf("\n=== Preset Comparison for %s ===\n", source)

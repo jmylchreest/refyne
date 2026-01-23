@@ -100,63 +100,84 @@ func (c *Cleaner) transform(doc *goquery.Document, result *Result) {
 	// Order matters: remove large chunks first, then clean attributes
 
 	// 1. Remove elements by selector (user-defined, most specific)
+	phase := result.Stats.AddPhase("selectors", len(c.config.RemoveSelectors) > 0)
 	if len(c.config.RemoveSelectors) > 0 {
-		c.removeBySelectors(doc, result)
+		c.removeBySelectors(doc, result, phase)
 	}
 
-	// 2. Remove script/style/comment elements
+	// 2. Remove script elements
+	phase = result.Stats.AddPhase("scripts", c.config.StripScripts)
 	if c.config.StripScripts {
-		c.removeElements(doc, "script", result)
+		c.removeElementsWithPhase(doc, "script", result, phase)
 	}
+
+	// 3. Remove style elements and attributes
+	phase = result.Stats.AddPhase("styles", c.config.StripStyles)
 	if c.config.StripStyles {
-		c.removeElements(doc, "style", result)
+		c.removeElementsWithPhase(doc, "style", result, phase)
 		c.removeStyleAttributes(doc, result)
 	}
+
+	// 4. Remove noscript elements
+	phase = result.Stats.AddPhase("noscript", c.config.StripNoscript)
 	if c.config.StripNoscript {
-		c.removeElements(doc, "noscript", result)
+		c.removeElementsWithPhase(doc, "noscript", result, phase)
 	}
+
+	// 5. Remove comments
+	phase = result.Stats.AddPhase("comments", c.config.StripComments)
 	if c.config.StripComments {
 		c.removeComments(doc, result)
 	}
 
-	// 3. Remove other element types
+	// 6. Remove SVG elements
+	phase = result.Stats.AddPhase("svg", c.config.StripSVGContent)
 	if c.config.StripSVGContent {
-		c.removeElements(doc, "svg", result)
+		c.removeElementsWithPhase(doc, "svg", result, phase)
 	}
+
+	// 7. Remove iframe elements
+	phase = result.Stats.AddPhase("iframes", c.config.StripIframes)
 	if c.config.StripIframes {
-		c.removeElements(doc, "iframe", result)
+		c.removeElementsWithPhase(doc, "iframe", result, phase)
 	}
 
-	// 4. Remove hidden elements (before empty check)
+	// 8. Remove hidden elements (before empty check)
+	phase = result.Stats.AddPhase("hidden", c.config.StripHiddenElements)
 	if c.config.StripHiddenElements {
-		c.removeHiddenElements(doc, result)
+		c.removeHiddenElements(doc, result, phase)
 	}
 
-	// 5. Remove event handlers
+	// 9. Remove event handlers
+	phase = result.Stats.AddPhase("event_handlers", c.config.StripEventHandlers)
 	if c.config.StripEventHandlers {
 		c.removeEventHandlers(doc, result)
 	}
 
-	// 6. Clean attributes
+	// 10. Clean attributes
+	result.Stats.AddPhase("attributes", true)
 	c.cleanAttributes(doc, result)
 
-	// 7. Heuristic-based removals
+	// 11. Heuristic: link density
+	phase = result.Stats.AddPhase("link_density", c.config.RemoveByLinkDensity)
 	if c.config.RemoveByLinkDensity {
-		c.removeByLinkDensity(doc, result)
+		c.removeByLinkDensity(doc, result, phase)
 	}
+
+	// 12. Heuristic: short text
+	phase = result.Stats.AddPhase("short_text", c.config.RemoveShortText)
 	if c.config.RemoveShortText {
-		c.removeShortText(doc, result)
+		c.removeShortText(doc, result, phase)
 	}
 
-	// 8. Remove empty elements (after other removals)
+	// 13. Remove empty elements (after other removals)
+	phase = result.Stats.AddPhase("empty", c.config.StripEmptyElements)
 	if c.config.StripEmptyElements {
-		c.removeEmptyElements(doc, result)
+		c.removeEmptyElements(doc, result, phase)
 	}
 
-	// 9. Whitespace normalization
-	if c.config.CollapseWhitespace {
-		c.collapseWhitespace(doc, result)
-	}
+	// 14. Whitespace normalization
+	result.Stats.AddPhase("whitespace", c.config.CollapseWhitespace)
 
 	// Count remaining elements
 	doc.Find("*").Each(func(_ int, _ *goquery.Selection) {
@@ -164,7 +185,7 @@ func (c *Cleaner) transform(doc *goquery.Document, result *Result) {
 	})
 }
 
-// removeElements removes all elements matching the given tag.
+// removeElements removes all elements matching the given tag (legacy, no phase tracking).
 func (c *Cleaner) removeElements(doc *goquery.Document, tag string, result *Result) {
 	doc.Find(tag).Each(func(_ int, s *goquery.Selection) {
 		result.Stats.RecordRemoval(tag)
@@ -172,8 +193,18 @@ func (c *Cleaner) removeElements(doc *goquery.Document, tag string, result *Resu
 	})
 }
 
+// removeElementsWithPhase removes all elements matching the given tag with phase tracking.
+func (c *Cleaner) removeElementsWithPhase(doc *goquery.Document, tag string, result *Result, phase *PhaseStats) {
+	doc.Find(tag).Each(func(_ int, s *goquery.Selection) {
+		result.Stats.RecordRemoval(tag)
+		phase.ElementsRemoved++
+		phase.Details[tag]++
+		s.Remove()
+	})
+}
+
 // removeBySelectors removes elements matching user-defined selectors.
-func (c *Cleaner) removeBySelectors(doc *goquery.Document, result *Result) {
+func (c *Cleaner) removeBySelectors(doc *goquery.Document, result *Result, phase *PhaseStats) {
 	for _, selector := range c.config.RemoveSelectors {
 		// Check if this element should be kept
 		selection := doc.Find(selector)
@@ -185,6 +216,8 @@ func (c *Cleaner) removeBySelectors(doc *goquery.Document, result *Result) {
 				if !c.shouldKeep(s) {
 					tagName := goquery.NodeName(s)
 					result.Stats.RecordRemoval(tagName)
+					phase.ElementsRemoved++
+					phase.Details[selector]++
 					s.Remove()
 				}
 			})
@@ -222,12 +255,14 @@ func (c *Cleaner) removeComments(doc *goquery.Document, result *Result) {
 }
 
 // removeHiddenElements removes elements with display:none or hidden attribute.
-func (c *Cleaner) removeHiddenElements(doc *goquery.Document, result *Result) {
+func (c *Cleaner) removeHiddenElements(doc *goquery.Document, result *Result, phase *PhaseStats) {
 	// Elements with hidden attribute
 	doc.Find("[hidden]").Each(func(_ int, s *goquery.Selection) {
 		if !c.shouldKeep(s) {
 			result.Stats.HiddenElementRemovals++
 			result.Stats.RecordRemoval(goquery.NodeName(s))
+			phase.ElementsRemoved++
+			phase.Details["[hidden]"]++
 			s.Remove()
 		}
 	})
@@ -237,6 +272,8 @@ func (c *Cleaner) removeHiddenElements(doc *goquery.Document, result *Result) {
 		if !c.shouldKeep(s) {
 			result.Stats.HiddenElementRemovals++
 			result.Stats.RecordRemoval(goquery.NodeName(s))
+			phase.ElementsRemoved++
+			phase.Details["[aria-hidden]"]++
 			s.Remove()
 		}
 	})
@@ -249,6 +286,8 @@ func (c *Cleaner) removeHiddenElements(doc *goquery.Document, result *Result) {
 			if !c.shouldKeep(s) {
 				result.Stats.HiddenElementRemovals++
 				result.Stats.RecordRemoval(goquery.NodeName(s))
+				phase.ElementsRemoved++
+				phase.Details["display:none"]++
 				s.Remove()
 			}
 		}
@@ -262,6 +301,8 @@ func (c *Cleaner) removeHiddenElements(doc *goquery.Document, result *Result) {
 			if !c.shouldKeep(s) {
 				result.Stats.HiddenElementRemovals++
 				result.Stats.RecordRemoval(goquery.NodeName(s))
+				phase.ElementsRemoved++
+				phase.Details["visibility:hidden"]++
 				s.Remove()
 			}
 		}
@@ -292,22 +333,32 @@ func (c *Cleaner) cleanAttributes(doc *goquery.Document, result *Result) {
 	if c.config.StripDataAttributes {
 		// Find elements with data-* attributes
 		doc.Find("*").Each(func(_ int, s *goquery.Selection) {
+			// Collect attributes to remove first to avoid modifying slice during iteration
+			var toRemove []string
 			for _, attr := range s.Nodes[0].Attr {
 				if strings.HasPrefix(attr.Key, "data-") {
-					s.RemoveAttr(attr.Key)
-					result.Stats.AttributesRemoved++
+					toRemove = append(toRemove, attr.Key)
 				}
+			}
+			for _, key := range toRemove {
+				s.RemoveAttr(key)
+				result.Stats.AttributesRemoved++
 			}
 		})
 	}
 
 	if c.config.StripARIA {
 		doc.Find("*").Each(func(_ int, s *goquery.Selection) {
+			// Collect attributes to remove first to avoid modifying slice during iteration
+			var toRemove []string
 			for _, attr := range s.Nodes[0].Attr {
 				if strings.HasPrefix(attr.Key, "aria-") {
-					s.RemoveAttr(attr.Key)
-					result.Stats.AttributesRemoved++
+					toRemove = append(toRemove, attr.Key)
 				}
+			}
+			for _, key := range toRemove {
+				s.RemoveAttr(key)
+				result.Stats.AttributesRemoved++
 			}
 		})
 	}
@@ -338,7 +389,7 @@ func (c *Cleaner) cleanAttributes(doc *goquery.Document, result *Result) {
 }
 
 // removeByLinkDensity removes elements with high link-to-text ratio.
-func (c *Cleaner) removeByLinkDensity(doc *goquery.Document, result *Result) {
+func (c *Cleaner) removeByLinkDensity(doc *goquery.Document, result *Result, phase *PhaseStats) {
 	threshold := c.config.LinkDensityThreshold
 	if threshold <= 0 {
 		threshold = 0.5
@@ -363,15 +414,18 @@ func (c *Cleaner) removeByLinkDensity(doc *goquery.Document, result *Result) {
 
 		density := float64(len(linkText)) / float64(len(totalText))
 		if density > threshold {
+			tagName := goquery.NodeName(s)
 			result.Stats.LinkDensityRemovals++
-			result.Stats.RecordRemoval(goquery.NodeName(s))
+			result.Stats.RecordRemoval(tagName)
+			phase.ElementsRemoved++
+			phase.Details[tagName]++
 			s.Remove()
 		}
 	})
 }
 
 // removeShortText removes elements with very little text content.
-func (c *Cleaner) removeShortText(doc *goquery.Document, result *Result) {
+func (c *Cleaner) removeShortText(doc *goquery.Document, result *Result, phase *PhaseStats) {
 	minLength := c.config.MinTextLength
 	if minLength <= 0 {
 		minLength = 20
@@ -390,15 +444,18 @@ func (c *Cleaner) removeShortText(doc *goquery.Document, result *Result) {
 
 		text := strings.TrimSpace(s.Text())
 		if len(text) < minLength && len(text) > 0 {
+			tagName := goquery.NodeName(s)
 			result.Stats.ShortTextRemovals++
-			result.Stats.RecordRemoval(goquery.NodeName(s))
+			result.Stats.RecordRemoval(tagName)
+			phase.ElementsRemoved++
+			phase.Details[tagName]++
 			s.Remove()
 		}
 	})
 }
 
 // removeEmptyElements removes elements with no text or meaningful children.
-func (c *Cleaner) removeEmptyElements(doc *goquery.Document, result *Result) {
+func (c *Cleaner) removeEmptyElements(doc *goquery.Document, result *Result, phase *PhaseStats) {
 	// Elements that are allowed to be empty
 	selfClosing := map[string]bool{
 		"img": true, "br": true, "hr": true, "input": true,
@@ -430,6 +487,8 @@ func (c *Cleaner) removeEmptyElements(doc *goquery.Document, result *Result) {
 			if len(text) == 0 && children == 0 {
 				result.Stats.EmptyElementRemovals++
 				result.Stats.RecordRemoval(tagName)
+				phase.ElementsRemoved++
+				phase.Details[tagName]++
 				s.Remove()
 				removed++
 			}

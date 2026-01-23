@@ -2,9 +2,19 @@ package refyne
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 )
+
+// PhaseStats tracks what a specific cleaning phase removed.
+type PhaseStats struct {
+	Name           string         `json:"name"`
+	Enabled        bool           `json:"enabled"`
+	ElementsRemoved int            `json:"elements_removed"`
+	BytesRemoved   int            `json:"bytes_removed"`
+	Details        map[string]int `json:"details,omitempty"` // tag/selector -> count
+}
 
 // Stats captures metrics about what the cleaner did.
 type Stats struct {
@@ -12,7 +22,10 @@ type Stats struct {
 	InputBytes  int `json:"input_bytes"`
 	OutputBytes int `json:"output_bytes"`
 
-	// Element counts
+	// Per-phase breakdown
+	Phases []*PhaseStats `json:"phases"`
+
+	// Element counts (aggregate)
 	ElementsRemoved map[string]int `json:"elements_removed"` // tag -> count
 	ElementsKept    int            `json:"elements_kept"`
 
@@ -40,7 +53,29 @@ func NewStats() *Stats {
 	return &Stats{
 		ElementsRemoved: make(map[string]int),
 		SelectorMatches: make(map[string]int),
+		Phases:          make([]*PhaseStats, 0),
 	}
+}
+
+// AddPhase adds a phase stats entry.
+func (s *Stats) AddPhase(name string, enabled bool) *PhaseStats {
+	phase := &PhaseStats{
+		Name:    name,
+		Enabled: enabled,
+		Details: make(map[string]int),
+	}
+	s.Phases = append(s.Phases, phase)
+	return phase
+}
+
+// GetPhase returns the phase with the given name, or nil.
+func (s *Stats) GetPhase(name string) *PhaseStats {
+	for _, p := range s.Phases {
+		if p.Name == name {
+			return p
+		}
+	}
+	return nil
 }
 
 // ReductionPercent returns the percentage reduction in size.
@@ -80,11 +115,56 @@ func (s *Stats) String() string {
 	sb.WriteString(fmt.Sprintf("Elements: %d removed, %d kept\n",
 		s.TotalElementsRemoved(), s.ElementsKept))
 
+	// Per-phase breakdown
+	if len(s.Phases) > 0 {
+		sb.WriteString("\nPer-phase breakdown:\n")
+		for _, phase := range s.Phases {
+			if !phase.Enabled {
+				continue
+			}
+			if phase.ElementsRemoved > 0 {
+				sb.WriteString(fmt.Sprintf("  %-25s %4d elements\n", phase.Name+":", phase.ElementsRemoved))
+				// Show top details
+				if len(phase.Details) > 0 {
+					// Sort by count descending
+					type kv struct {
+						k string
+						v int
+					}
+					var sorted []kv
+					for k, v := range phase.Details {
+						sorted = append(sorted, kv{k, v})
+					}
+					sort.Slice(sorted, func(i, j int) bool { return sorted[i].v > sorted[j].v })
+					// Show top 5
+					shown := 0
+					for _, item := range sorted {
+						if shown >= 5 {
+							break
+						}
+						sb.WriteString(fmt.Sprintf("    - %s: %d\n", item.k, item.v))
+						shown++
+					}
+				}
+			}
+		}
+	}
+
 	if len(s.ElementsRemoved) > 0 {
-		sb.WriteString("Removed by tag: ")
-		parts := make([]string, 0, len(s.ElementsRemoved))
-		for tag, count := range s.ElementsRemoved {
-			parts = append(parts, fmt.Sprintf("%s=%d", tag, count))
+		sb.WriteString("\nRemoved by tag: ")
+		// Sort by count descending
+		type kv struct {
+			k string
+			v int
+		}
+		var sorted []kv
+		for k, v := range s.ElementsRemoved {
+			sorted = append(sorted, kv{k, v})
+		}
+		sort.Slice(sorted, func(i, j int) bool { return sorted[i].v > sorted[j].v })
+		parts := make([]string, 0, len(sorted))
+		for _, item := range sorted {
+			parts = append(parts, fmt.Sprintf("%s=%d", item.k, item.v))
 		}
 		sb.WriteString(strings.Join(parts, ", "))
 		sb.WriteString("\n")
@@ -94,15 +174,16 @@ func (s *Stats) String() string {
 		sb.WriteString(fmt.Sprintf("Attributes removed: %d\n", s.AttributesRemoved))
 	}
 
-	if s.LinkDensityRemovals > 0 {
-		sb.WriteString(fmt.Sprintf("Link density removals: %d\n", s.LinkDensityRemovals))
+	if len(s.SelectorMatches) > 0 {
+		sb.WriteString("\nSelector matches:\n")
+		for sel, count := range s.SelectorMatches {
+			if count > 0 {
+				sb.WriteString(fmt.Sprintf("  %s: %d\n", sel, count))
+			}
+		}
 	}
 
-	if s.HiddenElementRemovals > 0 {
-		sb.WriteString(fmt.Sprintf("Hidden element removals: %d\n", s.HiddenElementRemovals))
-	}
-
-	sb.WriteString(fmt.Sprintf("Timing: parse=%v, transform=%v, output=%v, total=%v\n",
+	sb.WriteString(fmt.Sprintf("\nTiming: parse=%v, transform=%v, output=%v, total=%v\n",
 		s.ParseDuration.Round(time.Millisecond),
 		s.TransformDuration.Round(time.Millisecond),
 		s.OutputDuration.Round(time.Millisecond),

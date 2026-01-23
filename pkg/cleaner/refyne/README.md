@@ -99,15 +99,13 @@ Pre-configured settings for common use cases:
 // Minimal cleaning - maximum content preservation
 cfg := refyne.PresetMinimal()
 
-// Aggressive - for articles/blog posts
+// Aggressive - for articles/blog posts (enables link density heuristics)
 cfg := refyne.PresetAggressive()
-
-// E-commerce - preserves product tables, images, prices
-cfg := refyne.PresetEcommerce()
-
-// Recipes - preserves forms, lists, nutrition tables
-cfg := refyne.PresetRecipe()
 ```
+
+For domain-specific configurations (e-commerce, recipes, etc.), define custom
+selectors in your application config rather than using presets. This allows
+per-site tuning without modifying the library.
 
 ## Configuration Reference
 
@@ -249,6 +247,141 @@ chain := cleaner.NewChain(
 
 cleaned, err := chain.Clean(html)
 ```
+
+## API Integration: Using Custom Selectors
+
+When using refyne via the refyne-api, you can pass custom selectors in the
+`cleaner_chain` configuration. This allows per-request or per-site tuning.
+
+### Basic Usage with Selectors
+
+```json
+{
+  "url": "https://example.com/product",
+  "schema": "...",
+  "cleaner_chain": [
+    {
+      "name": "refyne",
+      "options": {
+        "remove_selectors": [".sidebar", "nav", "footer"],
+        "keep_selectors": [".product-details", "#main-content"]
+      }
+    },
+    {"name": "markdown"}
+  ]
+}
+```
+
+### Site-Specific Examples
+
+#### E-commerce (Shopify sites like thepihut.com)
+
+```json
+{
+  "cleaner_chain": [
+    {
+      "name": "refyne",
+      "options": {
+        "remove_selectors": [
+          ".site-header",
+          ".site-footer",
+          ".product-recommendations",
+          ".recently-viewed",
+          ".breadcrumb",
+          ".announcement-bar",
+          "[data-section-type='featured-collection']"
+        ],
+        "keep_selectors": [
+          ".product-single",
+          ".product__title",
+          ".product__price",
+          ".product__description",
+          "[itemprop='price']"
+        ]
+      }
+    },
+    {"name": "markdown"}
+  ]
+}
+```
+
+#### Recipe Sites (allrecipes, food blogs)
+
+```json
+{
+  "cleaner_chain": [
+    {
+      "name": "refyne",
+      "options": {
+        "remove_selectors": [
+          ".recipe-review",
+          ".user-comments",
+          ".related-recipes",
+          ".author-bio",
+          ".print-button",
+          "[class*='advertisement']"
+        ],
+        "keep_selectors": [
+          ".recipe-content",
+          ".ingredients-list",
+          ".instructions",
+          ".nutrition-info",
+          "[itemprop='recipeIngredient']",
+          "[itemprop='recipeInstructions']"
+        ]
+      }
+    },
+    {"name": "markdown"}
+  ]
+}
+```
+
+#### Using Presets with Additional Selectors
+
+Combine a preset with site-specific selectors:
+
+```json
+{
+  "cleaner_chain": [
+    {
+      "name": "refyne",
+      "options": {
+        "preset": "aggressive",
+        "keep_selectors": [".product-info", ".price-box"]
+      }
+    },
+    {"name": "markdown"}
+  ]
+}
+```
+
+### Selector Syntax Reference
+
+The refyne cleaner uses CSS selectors (via goquery/cascadia):
+
+| Pattern | Example | Matches |
+|---------|---------|---------|
+| Tag | `nav` | All `<nav>` elements |
+| Class | `.sidebar` | Elements with `class="sidebar"` |
+| ID | `#main` | Element with `id="main"` |
+| Attribute | `[hidden]` | Elements with `hidden` attribute |
+| Attr value | `[role='navigation']` | Elements where `role="navigation"` |
+| Attr contains | `[class*='ad']` | Classes containing "ad" |
+| Descendant | `nav a` | Links inside nav |
+| Child | `ul > li` | Direct li children of ul |
+| Multiple | `nav, footer` | nav OR footer elements |
+
+### Token Reduction Comparison
+
+Example results from thepihut.com product page (553KB input):
+
+| Configuration | Input Tokens | Reduction |
+|---------------|--------------|-----------|
+| No cleaning | ~138,000 | 0% |
+| markdown only | ~14,700 | 89% |
+| refyne (default) -> markdown | ~12,900 | 91% |
+| refyne + custom selectors -> markdown | ~8,500 | 94% |
+| refyne (aggressive) + keep selectors | ~6,200 | 96% |
 
 ## Performance Considerations
 

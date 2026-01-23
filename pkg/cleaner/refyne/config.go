@@ -163,8 +163,49 @@ func DefaultConfig() *Config {
 
 		// Common ad/tracking selectors that are safe to remove
 		RemoveSelectors: []string{
+			// Hidden elements
 			"[aria-hidden='true']",
 			"[hidden]",
+
+			// Google AdSense / DoubleClick
+			"ins.adsbygoogle",
+			"[data-ad-client]",
+			"[data-ad-slot]",
+			"[data-google-query-id]",
+			"iframe[src*='doubleclick']",
+			"iframe[src*='googlesyndication']",
+
+			// Common ad classes/IDs
+			".ad",
+			".ads",
+			".advert",
+			".advertisement",
+			".ad-container",
+			".ad-wrapper",
+			".ad-slot",
+			".ad-unit",
+			".ad-banner",
+			"#ad",
+			"#ads",
+			"[class*='sponsored']",
+			"[id*='google_ads']",
+
+			// Social sharing buttons (not content)
+			".share-buttons",
+			".social-share",
+			".sharing-buttons",
+
+			// Cookie banners / GDPR notices
+			"[class*='cookie']",
+			"[id*='cookie']",
+			"[class*='gdpr']",
+			"[class*='consent']",
+
+			// Newsletter popups
+			"[class*='newsletter']",
+			"[class*='subscribe']",
+			".popup",
+			".modal-backdrop",
 		},
 
 		// Whitespace normalization
@@ -221,38 +262,102 @@ func PresetAggressive() *Config {
 	return cfg
 }
 
-// PresetEcommerce returns a config optimized for e-commerce product pages.
-// Preserves tables, images, and product details while removing navigation.
-func PresetEcommerce() *Config {
-	cfg := DefaultConfig()
-	cfg.PreserveTables = true
-	cfg.PreserveImages = true
-	cfg.PreserveLists = true
-	cfg.RemoveSelectors = append(cfg.RemoveSelectors,
-		"nav",
-		"footer",
-		".cookie-banner",
-		".newsletter",
-		".recently-viewed",
-		".recommendations",
-	)
-	return cfg
-}
+// Merge merges another config into this one.
+// Non-zero/non-empty values from other override this config.
+// Selectors are appended, not replaced.
+func (c *Config) Merge(other *Config) *Config {
+	if other == nil {
+		return c
+	}
 
-// PresetRecipe returns a config optimized for recipe pages.
-// Preserves forms (ingredient checkboxes), lists, and structured content.
-func PresetRecipe() *Config {
-	cfg := DefaultConfig()
-	cfg.PreserveForms = true
-	cfg.PreserveLists = true
-	cfg.PreserveImages = true
-	cfg.PreserveTables = true
-	cfg.RemoveSelectors = append(cfg.RemoveSelectors,
-		"nav",
-		"footer",
-		".comments",
-		".related-recipes",
-		".advertisement",
-	)
-	return cfg
+	// Create a copy
+	merged := *c
+
+	// Merge removal options (other wins if true)
+	if other.StripScripts {
+		merged.StripScripts = true
+	}
+	if other.StripStyles {
+		merged.StripStyles = true
+	}
+	if other.StripComments {
+		merged.StripComments = true
+	}
+	if other.StripHiddenElements {
+		merged.StripHiddenElements = true
+	}
+	if other.StripEmptyElements {
+		merged.StripEmptyElements = true
+	}
+	if other.StripEventHandlers {
+		merged.StripEventHandlers = true
+	}
+	if other.StripSVGContent {
+		merged.StripSVGContent = true
+	}
+	if other.StripIframes {
+		merged.StripIframes = true
+	}
+	if other.StripNoscript {
+		merged.StripNoscript = true
+	}
+
+	// Merge attribute options
+	if other.StripDataAttributes {
+		merged.StripDataAttributes = true
+	}
+	if other.StripClasses {
+		merged.StripClasses = true
+	}
+	if other.StripIDs {
+		merged.StripIDs = true
+	}
+	if other.StripARIA {
+		merged.StripARIA = true
+	}
+	if other.StripMicrodata {
+		merged.StripMicrodata = true
+	}
+
+	// Merge heuristics
+	if other.RemoveByLinkDensity {
+		merged.RemoveByLinkDensity = true
+	}
+	if other.LinkDensityThreshold > 0 {
+		merged.LinkDensityThreshold = other.LinkDensityThreshold
+	}
+	if other.RemoveShortText {
+		merged.RemoveShortText = true
+	}
+	if other.MinTextLength > 0 {
+		merged.MinTextLength = other.MinTextLength
+	}
+
+	// Append selectors (deduplicated)
+	if len(other.RemoveSelectors) > 0 {
+		seen := make(map[string]bool)
+		for _, s := range merged.RemoveSelectors {
+			seen[s] = true
+		}
+		for _, s := range other.RemoveSelectors {
+			if !seen[s] {
+				merged.RemoveSelectors = append(merged.RemoveSelectors, s)
+				seen[s] = true
+			}
+		}
+	}
+	if len(other.KeepSelectors) > 0 {
+		seen := make(map[string]bool)
+		for _, s := range merged.KeepSelectors {
+			seen[s] = true
+		}
+		for _, s := range other.KeepSelectors {
+			if !seen[s] {
+				merged.KeepSelectors = append(merged.KeepSelectors, s)
+				seen[s] = true
+			}
+		}
+	}
+
+	return &merged
 }
