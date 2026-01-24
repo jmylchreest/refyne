@@ -99,6 +99,7 @@ func New(opts ...Option) (*Refyne, error) {
 			APIKey:         cfg.APIKey,
 			BaseURL:        cfg.BaseURL,
 			Temperature:    cfg.Temperature,
+			MaxTokens:      cfg.MaxTokens,
 			MaxRetries:     cfg.MaxRetries,
 			MaxContentSize: cfg.MaxContentSize,
 			StrictMode:     cfg.StrictMode,
