@@ -132,7 +132,7 @@ func DefaultConfig() *Config {
 		StripStyles:         true,
 		StripComments:       true,
 		StripEventHandlers:  true,
-		StripNoscript:       true,
+		StripNoscript:       false, // Keep noscript - often contains image fallbacks for JS-loaded content
 		StripSVGContent:     true,
 		StripIframes:        true,
 		StripHiddenElements: true,
