@@ -41,12 +41,22 @@ type Config struct {
 	// StripIframes removes iframe elements.
 	StripIframes bool `json:"strip_iframes"`
 
-	// StripNoscript removes noscript fallback content.
+	// StripNoscript removes <noscript> elements and their contents entirely.
+	// When true, UnwrapNoscript is ignored.
+	//
+	// Interaction with UnwrapNoscript:
+	//   StripNoscript=true,  UnwrapNoscript=*     → noscript removed entirely
+	//   StripNoscript=false, UnwrapNoscript=true  → noscript content kept, tag removed
+	//   StripNoscript=false, UnwrapNoscript=false → noscript tag and content kept as-is
 	StripNoscript bool `json:"strip_noscript"`
 
-	// UnwrapNoscript replaces <noscript> tags with their contents.
-	// This is useful because markdown converters typically ignore noscript content.
-	// Only applies when StripNoscript is false.
+	// UnwrapNoscript replaces <noscript> tags with their parsed contents.
+	// This is useful because markdown converters typically ignore noscript content,
+	// but sites like Instructables use noscript for lazy-loading image fallbacks.
+	//
+	// IMPORTANT: This option is ignored when StripNoscript is true.
+	// Set StripNoscript=false and UnwrapNoscript=true to preserve images
+	// inside noscript tags for markdown conversion.
 	UnwrapNoscript bool `json:"unwrap_noscript"`
 
 	// === Attribute Cleaning ===
