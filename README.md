@@ -251,6 +251,193 @@ Output:
       --save-training-data   Save input/output pairs for fine-tuning (JSONL file path)
 ```
 
+## Using Refyne Packages in Your Own Projects
+
+Refyne is more than a CLI - it provides reusable Go packages for HTML cleaning, content extraction, and web scraping that you can use directly in your own applications.
+
+### The Refyne Cleaner Package
+
+The `pkg/cleaner/refyne` package is a highly configurable HTML cleaner optimized for preparing web content for LLM consumption. It reduces token usage while preserving meaningful content.
+
+```bash
+go get github.com/jmylchreest/refyne/pkg/cleaner/refyne
+```
+
+#### Why Use It?
+
+- **Token reduction**: Strips scripts, styles, ads, tracking, hidden elements - things LLMs don't need
+- **Configurable presets**: From minimal cleaning to aggressive content extraction
+- **Multiple output formats**: HTML, plain text, or LLM-optimized markdown with structured metadata
+- **Image handling**: Extracts images to frontmatter with `{{IMG_001}}` placeholders in the body
+- **Lazy-loading support**: Handles `data-src`, `srcset`, and noscript fallbacks for JS-loaded images
+
+#### Basic Usage
+
+```go
+package main
+
+import (
+    "fmt"
+    refynecleaner "github.com/jmylchreest/refyne/pkg/cleaner/refyne"
+)
+
+func main() {
+    // Create cleaner with default config (HTML output)
+    cleaner := refynecleaner.New(nil)
+
+    html := `<html>
+        <head><script>tracking();</script></head>
+        <body>
+            <nav>Menu items...</nav>
+            <article>
+                <h1>Article Title</h1>
+                <p>Important content here.</p>
+            </article>
+            <div class="ad">Advertisement</div>
+        </body>
+    </html>`
+
+    cleaned, _ := cleaner.Clean(html)
+    fmt.Println(cleaned)
+    // Output: Clean HTML with scripts, ads, and navigation removed
+}
+```
+
+#### Markdown Output with Frontmatter (for LLMs)
+
+The most powerful mode for LLM consumption - generates markdown with YAML frontmatter containing structured metadata:
+
+```go
+package main
+
+import (
+    "fmt"
+    refynecleaner "github.com/jmylchreest/refyne/pkg/cleaner/refyne"
+)
+
+func main() {
+    cfg := refynecleaner.DefaultConfig()
+    cfg.Output = refynecleaner.OutputMarkdown
+    cfg.IncludeFrontmatter = true  // Add YAML metadata header
+    cfg.ExtractImages = true       // Images become {{IMG_001}} placeholders
+    cfg.ExtractHeadings = true     // Include heading structure
+    // Optional: resolve relative URLs to absolute (disabled by default to save tokens)
+    // cfg.BaseURL = "https://example.com"
+    // cfg.ResolveURLs = true
+
+    cleaner := refynecleaner.New(cfg)
+
+    html := `<html><body>
+        <h1>Recipe: Chocolate Cake</h1>
+        <img src="/images/cake.jpg" alt="Delicious chocolate cake">
+        <p>A rich, moist chocolate cake.</p>
+        <h2>Ingredients</h2>
+        <ul><li>2 cups flour</li><li>1 cup sugar</li></ul>
+    </body></html>`
+
+    markdown, _ := cleaner.Clean(html)
+    fmt.Println(markdown)
+}
+```
+
+Output:
+```yaml
+---
+# Content Metadata
+# Images are referenced in the body as {{IMG_001}}, {{IMG_002}}, etc.
+# Use this map to look up the actual URL and description for each placeholder.
+images:
+  IMG_001:
+    url: "https://example.com/images/cake.jpg"
+    alt: "Delicious chocolate cake"
+
+headings:
+  - level: 1
+    text: "Recipe: Chocolate Cake"
+  - level: 2
+    text: "Ingredients"
+
+links_count: 0
+
+hints:
+  - "Image placeholders like {{IMG_001}} appear in the body where images belong"
+  - "Look up each placeholder in the 'images' map above to get the actual URL"
+---
+
+# Recipe: Chocolate Cake
+
+{{IMG_001}}
+
+A rich, moist chocolate cake.
+
+## Ingredients
+
+- 2 cups flour
+- 1 cup sugar
+```
+
+#### Configuration Presets
+
+```go
+// Minimal - only removes scripts/styles/comments
+cfg := refynecleaner.PresetMinimal()
+
+// Default - removes ads, tracking, hidden elements, preserves content structure
+cfg := refynecleaner.DefaultConfig()
+
+// Aggressive - also removes navigation, sidebars, short text blocks
+cfg := refynecleaner.PresetAggressive()
+```
+
+#### Custom Selectors
+
+```go
+cfg := refynecleaner.DefaultConfig()
+
+// Remove specific elements
+cfg.RemoveSelectors = append(cfg.RemoveSelectors,
+    ".sidebar",
+    "#comments",
+    "[data-testid='promo-banner']",
+)
+
+// Force keep elements (overrides removals)
+cfg.KeepSelectors = []string{
+    ".product-price",
+    ".main-content",
+}
+```
+
+#### Getting Stats
+
+```go
+cleaner := refynecleaner.New(cfg)
+result := cleaner.CleanWithStats(html)
+
+fmt.Printf("Input: %d bytes\n", result.Stats.InputBytes)
+fmt.Printf("Output: %d bytes\n", result.Stats.OutputBytes)
+fmt.Printf("Reduction: %.1f%%\n", result.Stats.ReductionPercent)
+fmt.Printf("Parse time: %v\n", result.Stats.ParseDuration)
+fmt.Printf("Clean time: %v\n", result.Stats.CleanDuration)
+
+// Access extracted metadata (when using markdown output)
+if result.Metadata != nil {
+    fmt.Printf("Images found: %d\n", len(result.Metadata.Images))
+    fmt.Printf("Headings found: %d\n", len(result.Metadata.Headings))
+}
+```
+
+### Other Reusable Packages
+
+| Package | Description |
+|---------|-------------|
+| `pkg/cleaner` | Cleaner interface and implementations (noop, markdown, trafilatura, readability, chain) |
+| `pkg/cleaner/refyne` | Configurable HTML cleaner with LLM-optimized output |
+| `pkg/fetcher` | HTTP fetching with static and dynamic (headless browser) modes |
+| `pkg/extractor` | LLM extraction with provider support (Anthropic, OpenAI, OpenRouter, Ollama) |
+| `pkg/schema` | Schema definition and JSON Schema generation |
+| `pkg/refyne` | High-level orchestrator combining fetch, clean, and extract |
+
 ## Development
 
 ```bash

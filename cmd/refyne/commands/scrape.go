@@ -18,6 +18,7 @@ import (
 	"github.com/jmylchreest/refyne/internal/logger"
 	"github.com/jmylchreest/refyne/internal/output"
 	"github.com/jmylchreest/refyne/pkg/cleaner"
+	refynecleaner "github.com/jmylchreest/refyne/pkg/cleaner/refyne"
 	"github.com/jmylchreest/refyne/pkg/extractor"
 	"github.com/jmylchreest/refyne/pkg/extractor/anthropic"
 	"github.com/jmylchreest/refyne/pkg/extractor/ollama"
@@ -220,12 +221,15 @@ func runScrape(cmd *cobra.Command, args []string) error {
 		cl = cleaner.NewNoop()
 		logger.Debug("content cleaning disabled")
 	} else {
-		// Default: Trafilatura (extract main content) → Markdown (format for LLM)
-		cl = cleaner.NewChain(
-			cleaner.NewTrafilatura(nil),
-			cleaner.NewMarkdown(),
-		)
-		logger.Debug("using default cleaner chain", "cleaner", cl.Name())
+		// Default: Refyne cleaner with LLM-optimized markdown output
+		// Images are extracted to frontmatter with {{IMG_001}} placeholders in body
+		cfg := refynecleaner.DefaultConfig()
+		cfg.Output = refynecleaner.OutputMarkdown
+		cfg.IncludeFrontmatter = true
+		cfg.ExtractImages = true
+		cfg.ExtractHeadings = true
+		cl = refynecleaner.New(cfg)
+		logger.Debug("using refyne cleaner with markdown output", "cleaner", cl.Name())
 	}
 
 	// Build extractor fallback chain

@@ -215,6 +215,10 @@ type Result struct {
 	// Stats contains metrics about what was done.
 	Stats *Stats `json:"stats"`
 
+	// Metadata contains structured information extracted from the HTML.
+	// Only populated when Output=markdown and ExtractImages/ExtractHeadings are enabled.
+	Metadata *ContentMetadata `json:"metadata,omitempty"`
+
 	// Warnings contains non-fatal issues encountered.
 	Warnings []Warning `json:"warnings,omitempty"`
 

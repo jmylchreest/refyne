@@ -21,7 +21,7 @@ func TestDefaultConfig(t *testing.T) {
 		{"StripStyles", cfg.StripStyles, true},
 		{"StripComments", cfg.StripComments, true},
 		{"StripEventHandlers", cfg.StripEventHandlers, true},
-		{"StripNoscript", cfg.StripNoscript, true},
+		{"StripNoscript", cfg.StripNoscript, false}, // Default: preserve for image fallbacks
 		{"StripSVGContent", cfg.StripSVGContent, true},
 		{"StripIframes", cfg.StripIframes, true},
 		{"StripHiddenElements", cfg.StripHiddenElements, true},

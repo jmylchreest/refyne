@@ -1,7 +1,6 @@
 package refyne
 
 import (
-	"bytes"
 	"regexp"
 	"strings"
 	"time"
@@ -551,61 +550,19 @@ var commentRegex = regexp.MustCompile(`<!--[\s\S]*?-->`)
 
 // generateOutput produces the final output in the configured format.
 func (c *Cleaner) generateOutput(doc *goquery.Document, result *Result) (string, error) {
-	// Get HTML from body (skip the wrapper goquery adds)
-	html, err := doc.Find("body").Html()
-	if err != nil {
-		// Fallback to full document
-		html, err = doc.Html()
+	switch c.config.Output {
+	case OutputText:
+		// Get HTML first, then convert to text
+		html, err := c.htmlOutput(doc)
 		if err != nil {
 			return "", err
 		}
-	}
-
-	// Remove comments via regex (since goquery doesn't handle them well)
-	if c.config.StripComments {
-		html = commentRegex.ReplaceAllString(html, "")
-	}
-
-	// Collapse whitespace
-	if c.config.CollapseWhitespace {
-		html = whitespaceRegex.ReplaceAllString(html, " ")
-	}
-
-	// Trim
-	if c.config.TrimElements {
-		html = strings.TrimSpace(html)
-	}
-
-	// Convert to requested output format
-	switch c.config.Output {
-	case OutputText:
 		return c.htmlToText(html), nil
 	case OutputMarkdown:
-		// For now, just return HTML. Full markdown conversion would need another library.
-		result.AddWarning("output", "Markdown output not yet implemented, returning HTML", "")
-		return html, nil
+		return c.htmlToMarkdown(doc, result), nil
 	default:
-		return html, nil
+		// HTML output
+		return c.htmlOutput(doc)
 	}
 }
 
-// htmlToText extracts plain text from HTML.
-func (c *Cleaner) htmlToText(html string) string {
-	doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
-	if err != nil {
-		// Fallback: strip tags via regex
-		tagRegex := regexp.MustCompile(`<[^>]*>`)
-		return strings.TrimSpace(tagRegex.ReplaceAllString(html, ""))
-	}
-
-	var buf bytes.Buffer
-	doc.Find("body").Each(func(_ int, s *goquery.Selection) {
-		buf.WriteString(s.Text())
-	})
-
-	text := buf.String()
-	if c.config.CollapseWhitespace {
-		text = whitespaceRegex.ReplaceAllString(text, " ")
-	}
-	return strings.TrimSpace(text)
-}

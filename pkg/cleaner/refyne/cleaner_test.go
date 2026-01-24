@@ -638,3 +638,224 @@ func BenchmarkCleanAggressive(b *testing.B) {
 		_, _ = c.Clean(html)
 	}
 }
+
+func TestMarkdownOutput(t *testing.T) {
+	t.Run("basic markdown conversion", func(t *testing.T) {
+		html := `<html><body><h1>Title</h1><p>Hello <strong>world</strong></p></body></html>`
+		c := New(&Config{Output: OutputMarkdown})
+		result, err := c.Clean(html)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if !strings.Contains(result, "# Title") {
+			t.Errorf("expected markdown h1, got: %s", result)
+		}
+		if !strings.Contains(result, "**world**") {
+			t.Errorf("expected markdown bold, got: %s", result)
+		}
+	})
+
+	t.Run("markdown with frontmatter", func(t *testing.T) {
+		html := `<html><body><h1>Title</h1><h2>Subtitle</h2><p>Content</p></body></html>`
+		c := New(&Config{
+			Output:             OutputMarkdown,
+			IncludeFrontmatter: true,
+			ExtractHeadings:    true,
+		})
+		result, err := c.Clean(html)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if !strings.HasPrefix(result, "---\n") {
+			t.Errorf("expected frontmatter to start with ---, got: %s", result[:50])
+		}
+		if !strings.Contains(result, "headings:") {
+			t.Errorf("expected headings in frontmatter")
+		}
+		if !strings.Contains(result, "level: 1") {
+			t.Errorf("expected h1 heading level")
+		}
+	})
+
+	t.Run("markdown with image placeholders", func(t *testing.T) {
+		html := `<html><body><img src="test.jpg" alt="Test Image"><p>Content</p></body></html>`
+		c := New(&Config{
+			Output:             OutputMarkdown,
+			IncludeFrontmatter: true,
+			ExtractImages:      true,
+		})
+		result, err := c.Clean(html)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if !strings.Contains(result, "{{IMG_001}}") {
+			t.Errorf("expected image placeholder in body, got: %s", result)
+		}
+		if !strings.Contains(result, "IMG_001:") {
+			t.Errorf("expected IMG_001 in frontmatter")
+		}
+		if !strings.Contains(result, `url: "test.jpg"`) {
+			t.Errorf("expected image URL in frontmatter")
+		}
+		if !strings.Contains(result, `alt: "Test Image"`) {
+			t.Errorf("expected alt text in frontmatter")
+		}
+	})
+
+	t.Run("multiple images get sequential placeholders", func(t *testing.T) {
+		html := `<html><body>
+			<img src="a.jpg" alt="A">
+			<img src="b.jpg" alt="B">
+			<img src="c.jpg" alt="C">
+		</body></html>`
+		c := New(&Config{
+			Output:             OutputMarkdown,
+			IncludeFrontmatter: true,
+			ExtractImages:      true,
+		})
+		result, err := c.Clean(html)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if !strings.Contains(result, "{{IMG_001}}") {
+			t.Errorf("expected IMG_001 placeholder")
+		}
+		if !strings.Contains(result, "{{IMG_002}}") {
+			t.Errorf("expected IMG_002 placeholder")
+		}
+		if !strings.Contains(result, "{{IMG_003}}") {
+			t.Errorf("expected IMG_003 placeholder")
+		}
+	})
+}
+
+func TestResolveURLs(t *testing.T) {
+	t.Run("relative URLs kept by default", func(t *testing.T) {
+		html := `<html><body><a href="/page">Link</a><img src="/img.jpg"></body></html>`
+		c := New(&Config{
+			Output:             OutputMarkdown,
+			IncludeFrontmatter: true,
+			ExtractImages:      true,
+			BaseURL:            "https://example.com",
+			ResolveURLs:        false, // default
+		})
+		result, err := c.Clean(html)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if strings.Contains(result, "https://example.com/page") {
+			t.Errorf("expected relative URL to be kept, got absolute")
+		}
+		if !strings.Contains(result, "(/page)") {
+			t.Errorf("expected relative link URL: %s", result)
+		}
+		if !strings.Contains(result, `url: "/img.jpg"`) {
+			t.Errorf("expected relative image URL in frontmatter: %s", result)
+		}
+	})
+
+	t.Run("relative URLs resolved when enabled", func(t *testing.T) {
+		html := `<html><body><a href="/page">Link</a><img src="/img.jpg"></body></html>`
+		c := New(&Config{
+			Output:             OutputMarkdown,
+			IncludeFrontmatter: true,
+			ExtractImages:      true,
+			BaseURL:            "https://example.com",
+			ResolveURLs:        true,
+		})
+		result, err := c.Clean(html)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if !strings.Contains(result, "https://example.com/page") {
+			t.Errorf("expected absolute link URL: %s", result)
+		}
+		if !strings.Contains(result, `url: "https://example.com/img.jpg"`) {
+			t.Errorf("expected absolute image URL in frontmatter: %s", result)
+		}
+	})
+
+	t.Run("protocol-relative URLs always resolved", func(t *testing.T) {
+		html := `<html><body><img src="//cdn.example.com/img.jpg"></body></html>`
+		c := New(&Config{
+			Output:             OutputMarkdown,
+			IncludeFrontmatter: true,
+			ExtractImages:      true,
+			ResolveURLs:        false, // even when false
+		})
+		result, err := c.Clean(html)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if !strings.Contains(result, "https://cdn.example.com/img.jpg") {
+			t.Errorf("expected protocol-relative URL to be resolved: %s", result)
+		}
+	})
+
+	t.Run("absolute URLs unchanged", func(t *testing.T) {
+		html := `<html><body><img src="https://other.com/img.jpg"></body></html>`
+		c := New(&Config{
+			Output:             OutputMarkdown,
+			IncludeFrontmatter: true,
+			ExtractImages:      true,
+			BaseURL:            "https://example.com",
+			ResolveURLs:        true,
+		})
+		result, err := c.Clean(html)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if !strings.Contains(result, "https://other.com/img.jpg") {
+			t.Errorf("expected absolute URL to remain unchanged: %s", result)
+		}
+	})
+}
+
+func TestFrontmatterHints(t *testing.T) {
+	t.Run("includes hints by default", func(t *testing.T) {
+		html := `<html><body><img src="test.jpg"><p>Content</p></body></html>`
+		c := New(&Config{
+			Output:             OutputMarkdown,
+			IncludeFrontmatter: true,
+			ExtractImages:      true,
+			IncludeHints:       true,
+		})
+		result, err := c.Clean(html)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if !strings.Contains(result, "hints:") {
+			t.Errorf("expected hints section in frontmatter")
+		}
+		if !strings.Contains(result, "{{IMG_001}}") {
+			t.Errorf("expected hint about image placeholders")
+		}
+	})
+
+	t.Run("hints can be disabled", func(t *testing.T) {
+		html := `<html><body><img src="test.jpg"><p>Content</p></body></html>`
+		c := New(&Config{
+			Output:             OutputMarkdown,
+			IncludeFrontmatter: true,
+			ExtractImages:      true,
+			IncludeHints:       false,
+		})
+		result, err := c.Clean(html)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if strings.Contains(result, "hints:") {
+			t.Errorf("expected no hints section when disabled")
+		}
+	})
+}

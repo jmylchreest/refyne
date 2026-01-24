@@ -12,6 +12,33 @@ const (
 	OutputMarkdown OutputFormat = "markdown"
 )
 
+// ImageRef represents an extracted image with context.
+type ImageRef struct {
+	URL     string `json:"url" yaml:"url"`
+	Alt     string `json:"alt,omitempty" yaml:"alt,omitempty"`
+	Context string `json:"context,omitempty" yaml:"context,omitempty"`
+}
+
+// HeadingRef represents an extracted heading.
+type HeadingRef struct {
+	Level int    `json:"level" yaml:"level"`
+	Text  string `json:"text" yaml:"text"`
+	ID    string `json:"id,omitempty" yaml:"id,omitempty"`
+}
+
+// ContentMetadata contains structured information extracted from the HTML.
+type ContentMetadata struct {
+	// Images is a map from placeholder ID (e.g., "IMG_001") to image details.
+	// Placeholders appear in the markdown body as {{IMG_001}}.
+	Images map[string]ImageRef `json:"images,omitempty" yaml:"images,omitempty"`
+
+	// ImageOrder preserves the order images were encountered (for iteration).
+	ImageOrder []string `json:"image_order,omitempty" yaml:"-"`
+
+	Headings   []HeadingRef `json:"headings,omitempty" yaml:"headings,omitempty"`
+	LinksCount int          `json:"links_count" yaml:"links_count"`
+}
+
 // Config defines all configuration options for the refyne cleaner.
 type Config struct {
 	// === Removal Options ===
@@ -133,6 +160,35 @@ type Config struct {
 	// Output specifies the output format: html, text, or markdown.
 	Output OutputFormat `json:"output"`
 
+	// === Markdown Output Options (only used when Output=markdown) ===
+
+	// IncludeFrontmatter prepends YAML frontmatter with extracted metadata.
+	// Default: false (to maintain backward compatibility)
+	IncludeFrontmatter bool `json:"include_frontmatter"`
+
+	// ExtractImages extracts image URLs and includes them in metadata.
+	// Images are skipped in the markdown body when frontmatter is enabled.
+	// Default: true
+	ExtractImages bool `json:"extract_images"`
+
+	// ExtractHeadings extracts heading structure into metadata.
+	// Default: true
+	ExtractHeadings bool `json:"extract_headings"`
+
+	// IncludeHints adds LLM processing hints to the frontmatter.
+	// Default: true
+	IncludeHints bool `json:"include_hints"`
+
+	// CustomHints allows adding custom hints to the frontmatter.
+	CustomHints []string `json:"custom_hints"`
+
+	// BaseURL for resolving relative URLs in images/links (only used when ResolveURLs is true).
+	BaseURL string `json:"base_url"`
+
+	// ResolveURLs controls whether relative URLs are resolved to absolute using BaseURL.
+	// Default: false (keep URLs as-is, saves tokens since API postprocessor handles this)
+	ResolveURLs bool `json:"resolve_urls"`
+
 	// Debug enables verbose logging of what was removed and why.
 	Debug bool `json:"debug"`
 }
@@ -230,7 +286,15 @@ func DefaultConfig() *Config {
 
 		// Default to HTML output
 		Output: OutputHTML,
-		Debug:  false,
+
+		// Markdown output options (used when Output=markdown)
+		IncludeFrontmatter: false, // Backward compatible default
+		ExtractImages:      true,
+		ExtractHeadings:    true,
+		IncludeHints:       true,
+		ResolveURLs:        false, // Keep relative URLs by default (API postprocessor handles this)
+
+		Debug: false,
 	}
 }
 
