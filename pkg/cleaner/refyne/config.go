@@ -44,6 +44,11 @@ type Config struct {
 	// StripNoscript removes noscript fallback content.
 	StripNoscript bool `json:"strip_noscript"`
 
+	// UnwrapNoscript replaces <noscript> tags with their contents.
+	// This is useful because markdown converters typically ignore noscript content.
+	// Only applies when StripNoscript is false.
+	UnwrapNoscript bool `json:"unwrap_noscript"`
+
 	// === Attribute Cleaning ===
 
 	// StripDataAttributes removes data-* attributes.
@@ -133,6 +138,7 @@ func DefaultConfig() *Config {
 		StripComments:       true,
 		StripEventHandlers:  true,
 		StripNoscript:       false, // Keep noscript - often contains image fallbacks for JS-loaded content
+		UnwrapNoscript:      true,  // Unwrap noscript content so markdown converters can process it
 		StripSVGContent:     true,
 		StripIframes:        true,
 		StripHiddenElements: true,
@@ -300,6 +306,9 @@ func (c *Config) Merge(other *Config) *Config {
 	}
 	if other.StripNoscript {
 		merged.StripNoscript = true
+	}
+	if other.UnwrapNoscript {
+		merged.UnwrapNoscript = true
 	}
 
 	// Merge attribute options

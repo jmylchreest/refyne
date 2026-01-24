@@ -124,6 +124,14 @@ func (c *Cleaner) transform(doc *goquery.Document, result *Result) {
 		c.removeElementsWithPhase(doc, "noscript", result, phase)
 	}
 
+	// 4b. Unwrap noscript elements (if not stripped)
+	// This replaces <noscript>content</noscript> with just content
+	// so that markdown converters can process the inner elements
+	phase = result.Stats.AddPhase("unwrap_noscript", !c.config.StripNoscript && c.config.UnwrapNoscript)
+	if !c.config.StripNoscript && c.config.UnwrapNoscript {
+		c.unwrapNoscript(doc, result, phase)
+	}
+
 	// 5. Remove comments
 	phase = result.Stats.AddPhase("comments", c.config.StripComments)
 	if c.config.StripComments {
@@ -223,6 +231,37 @@ func (c *Cleaner) removeBySelectors(doc *goquery.Document, result *Result, phase
 			})
 		}
 	}
+}
+
+// unwrapNoscript replaces <noscript> tags with their contents.
+// This is necessary because markdown converters typically ignore noscript content.
+// Note: HTML parsers treat noscript content as raw text, so we need to re-parse it.
+func (c *Cleaner) unwrapNoscript(doc *goquery.Document, result *Result, phase *PhaseStats) {
+	doc.Find("noscript").Each(func(_ int, s *goquery.Selection) {
+		// Get the text content of the noscript element
+		// Note: This is raw text because HTML parsers don't parse noscript children
+		rawContent := s.Text()
+		if rawContent == "" {
+			return
+		}
+
+		// Re-parse the content as HTML
+		innerDoc, err := goquery.NewDocumentFromReader(strings.NewReader(rawContent))
+		if err != nil {
+			return
+		}
+
+		// Get the parsed HTML from the body
+		parsedHTML, err := innerDoc.Find("body").Html()
+		if err != nil || parsedHTML == "" {
+			return
+		}
+
+		// Replace the noscript element with the parsed content
+		s.ReplaceWithHtml(parsedHTML)
+		phase.ElementsRemoved++
+		phase.Details["noscript (unwrapped)"]++
+	})
 }
 
 // shouldKeep checks if an element matches any keep selectors.
