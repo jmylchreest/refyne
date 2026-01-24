@@ -63,15 +63,16 @@ type Provider interface {
 
 // ModelInfo contains metadata about a model including pricing and capabilities.
 type ModelInfo struct {
-	ID              string            `json:"id"`
-	Name            string            `json:"name"`
-	Description     string            `json:"description,omitempty"`
-	ContextLength   int               `json:"context_length"`
-	PromptPrice     float64           `json:"prompt_price"`     // Price per token (USD)
-	CompletionPrice float64           `json:"completion_price"` // Price per token (USD)
-	ImagePrice      float64           `json:"image_price,omitempty"`
-	IsFree          bool              `json:"is_free"`
-	Capabilities    ModelCapabilities `json:"capabilities"`
+	ID                  string            `json:"id"`
+	Name                string            `json:"name"`
+	Description         string            `json:"description,omitempty"`
+	ContextLength       int               `json:"context_length"`
+	MaxCompletionTokens int               `json:"max_completion_tokens,omitempty"` // Max output tokens (0 = unknown/unlimited)
+	PromptPrice         float64           `json:"prompt_price"`                    // Price per token (USD)
+	CompletionPrice     float64           `json:"completion_price"`                // Price per token (USD)
+	ImagePrice          float64           `json:"image_price,omitempty"`
+	IsFree              bool              `json:"is_free"`
+	Capabilities        ModelCapabilities `json:"capabilities"`
 }
 
 // ModelCapabilities describes what features a model supports.

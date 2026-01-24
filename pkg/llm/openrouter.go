@@ -363,7 +363,7 @@ func (p *OpenRouterProvider) refreshModelCache(ctx context.Context) error {
 		promptPrice := parsePrice(m.Pricing.Prompt)
 		completionPrice := parsePrice(m.Pricing.Completion)
 
-		cache[m.ID] = &ModelInfo{
+		info := &ModelInfo{
 			ID:              m.ID,
 			Name:            m.Name,
 			Description:     m.Description,
@@ -373,6 +373,13 @@ func (p *OpenRouterProvider) refreshModelCache(ctx context.Context) error {
 			IsFree:          promptPrice == 0 && completionPrice == 0,
 			Capabilities:    parseOpenRouterCapabilities(m.SupportedParameters),
 		}
+
+		// Extract max_completion_tokens from top_provider if available
+		if m.TopProvider != nil && m.TopProvider.MaxCompletionTokens > 0 {
+			info.MaxCompletionTokens = m.TopProvider.MaxCompletionTokens
+		}
+
+		cache[m.ID] = info
 	}
 
 	p.modelCacheMu.Lock()
@@ -390,12 +397,19 @@ type openRouterModelsResponse struct {
 }
 
 type openRouterModel struct {
-	ID                  string            `json:"id"`
-	Name                string            `json:"name"`
-	Description         string            `json:"description"`
-	Pricing             openRouterPricing `json:"pricing"`
-	ContextLength       int               `json:"context_length"`
-	SupportedParameters []string          `json:"supported_parameters"`
+	ID                  string                   `json:"id"`
+	Name                string                   `json:"name"`
+	Description         string                   `json:"description"`
+	Pricing             openRouterPricing        `json:"pricing"`
+	ContextLength       int                      `json:"context_length"`
+	SupportedParameters []string                 `json:"supported_parameters"`
+	TopProvider         *openRouterTopProvider   `json:"top_provider,omitempty"`
+}
+
+type openRouterTopProvider struct {
+	ContextLength       int  `json:"context_length,omitempty"`
+	MaxCompletionTokens int  `json:"max_completion_tokens,omitempty"`
+	IsModerated         bool `json:"is_moderated,omitempty"`
 }
 
 type openRouterPricing struct {
