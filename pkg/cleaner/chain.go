@@ -5,7 +5,7 @@ import (
 )
 
 // ChainCleaner applies multiple cleaners in sequence.
-// This allows composing cleaners, e.g., Trafilatura → Markdown.
+// This allows composing cleaners for multi-stage processing.
 type ChainCleaner struct {
 	cleaners []Cleaner
 }
@@ -16,8 +16,8 @@ type ChainCleaner struct {
 // Example:
 //
 //	chain := cleaner.NewChain(
-//	    cleaner.NewTrafilatura(),  // First: extract main content
-//	    cleaner.NewMarkdown(),     // Then: convert to markdown
+//	    refyne.New(refyne.PresetAggressive()),
+//	    cleaner.NewNoop(),
 //	)
 func NewChain(cleaners ...Cleaner) *ChainCleaner {
 	return &ChainCleaner{
