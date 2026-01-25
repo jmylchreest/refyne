@@ -416,7 +416,7 @@ func (f *DynamicFetcher) Close() error {
 		defer cancel()
 
 		for _, sessionID := range sessions {
-			f.flareSolverr.DestroySession(ctx, sessionID)
+			_ = f.flareSolverr.DestroySession(ctx, sessionID)
 		}
 	}
 

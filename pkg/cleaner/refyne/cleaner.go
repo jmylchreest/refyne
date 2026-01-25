@@ -132,7 +132,7 @@ func (c *Cleaner) transform(doc *goquery.Document, result *Result) {
 	}
 
 	// 5. Remove comments
-	phase = result.Stats.AddPhase("comments", c.config.StripComments)
+	_ = result.Stats.AddPhase("comments", c.config.StripComments)
 	if c.config.StripComments {
 		c.removeComments(doc, result)
 	}
@@ -156,7 +156,7 @@ func (c *Cleaner) transform(doc *goquery.Document, result *Result) {
 	}
 
 	// 9. Remove event handlers
-	phase = result.Stats.AddPhase("event_handlers", c.config.StripEventHandlers)
+	_ = result.Stats.AddPhase("event_handlers", c.config.StripEventHandlers)
 	if c.config.StripEventHandlers {
 		c.removeEventHandlers(doc, result)
 	}
@@ -189,14 +189,6 @@ func (c *Cleaner) transform(doc *goquery.Document, result *Result) {
 	// Count remaining elements
 	doc.Find("*").Each(func(_ int, _ *goquery.Selection) {
 		result.Stats.ElementsKept++
-	})
-}
-
-// removeElements removes all elements matching the given tag (legacy, no phase tracking).
-func (c *Cleaner) removeElements(doc *goquery.Document, tag string, result *Result) {
-	doc.Find(tag).Each(func(_ int, s *goquery.Selection) {
-		result.Stats.RecordRemoval(tag)
-		s.Remove()
 	})
 }
 
@@ -535,11 +527,6 @@ func (c *Cleaner) removeEmptyElements(doc *goquery.Document, result *Result, pha
 			break
 		}
 	}
-}
-
-// collapseWhitespace normalizes whitespace in text nodes.
-func (c *Cleaner) collapseWhitespace(doc *goquery.Document, result *Result) {
-	// This will be handled in the output phase
 }
 
 // whitespaceRegex matches multiple whitespace characters.

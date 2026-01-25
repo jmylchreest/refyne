@@ -183,12 +183,6 @@ func (c *Cleaner) buildFrontmatter(metadata *ContentMetadata) string {
 	return sb.String()
 }
 
-// formatSelection recursively formats a selection as markdown (without state tracking).
-// Used for non-image contexts like blockquotes.
-func (c *Cleaner) formatSelection(sb *strings.Builder, sel *goquery.Selection, listPrefix string, depth int) {
-	c.formatSelectionWithState(sb, sel, listPrefix, depth, nil)
-}
-
 // formatSelectionWithState recursively formats a selection as markdown with state tracking.
 func (c *Cleaner) formatSelectionWithState(sb *strings.Builder, sel *goquery.Selection, listPrefix string, depth int, state *markdownState) {
 	sel.Contents().Each(func(_ int, s *goquery.Selection) {
@@ -208,11 +202,6 @@ func (c *Cleaner) formatSelectionWithState(sb *strings.Builder, sel *goquery.Sel
 			c.formatElementWithState(sb, s, tagName, listPrefix, depth, state)
 		}
 	})
-}
-
-// formatElement handles element-specific markdown formatting (without state).
-func (c *Cleaner) formatElement(sb *strings.Builder, s *goquery.Selection, tag string, listPrefix string, depth int) {
-	c.formatElementWithState(sb, s, tag, listPrefix, depth, nil)
 }
 
 // formatElementWithState handles element-specific markdown formatting with state tracking.
@@ -340,7 +329,7 @@ func (c *Cleaner) formatElementWithState(sb *strings.Builder, s *goquery.Selecti
 			if goquery.NodeName(li) == "li" {
 				indent := strings.Repeat("  ", depth)
 				sb.WriteString(indent)
-				sb.WriteString(fmt.Sprintf("%d. ", counter))
+				fmt.Fprintf(sb, "%d. ", counter)
 				c.formatSelectionWithState(sb, li, indent, depth+1, state)
 				sb.WriteString("\n")
 				counter++
@@ -351,12 +340,12 @@ func (c *Cleaner) formatElementWithState(sb *strings.Builder, s *goquery.Selecti
 	case "dl":
 		c.ensureBlankLine(sb)
 		s.Children().Each(func(_ int, child *goquery.Selection) {
-			childTag := goquery.NodeName(child)
-			if childTag == "dt" {
+			switch goquery.NodeName(child) {
+			case "dt":
 				sb.WriteString("**")
 				c.formatSelectionWithState(sb, child, "", depth, state)
 				sb.WriteString("**\n")
-			} else if childTag == "dd" {
+			case "dd":
 				sb.WriteString(": ")
 				c.formatSelectionWithState(sb, child, "", depth, state)
 				sb.WriteString("\n")

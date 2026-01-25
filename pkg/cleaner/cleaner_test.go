@@ -2,21 +2,8 @@ package cleaner
 
 import (
 	"errors"
-	"os"
-	"path/filepath"
 	"testing"
 )
-
-// readTestdata reads a file from the testdata directory
-func readTestdata(t *testing.T, filename string) string {
-	t.Helper()
-	path := filepath.Join("testdata", filename)
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("failed to read testdata %s: %v", filename, err)
-	}
-	return string(data)
-}
 
 // --- NoopCleaner Tests ---
 

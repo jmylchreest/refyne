@@ -894,7 +894,7 @@ func TestGetJSONName(t *testing.T) {
 func TestHasOmitempty(t *testing.T) {
 	type TestStruct struct {
 		WithOmit    string `json:"name,omitempty"`
-		WithoutOmit string `json:"name"`
+		WithoutOmit string `json:"other_name"`
 		NoTag       string
 	}
 

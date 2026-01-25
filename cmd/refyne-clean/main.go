@@ -240,7 +240,7 @@ func fetchURL(url string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("fetching %s: %w", url, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("HTTP %d from %s", resp.StatusCode, url)
@@ -273,7 +273,7 @@ func outputJSONStats(result *refyne.Result, source string) {
 
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
-	enc.Encode(stats)
+	_ = enc.Encode(stats)
 }
 
 func runComparison(html string, source string) {

@@ -112,13 +112,13 @@ func (p *OllamaProvider) Execute(ctx context.Context, req Request) (*Response, e
 
 	resp, err := p.client.Do(httpReq)
 	if err != nil {
-		return nil, fmt.Errorf("Ollama request failed: %w", err)
+		return nil, fmt.Errorf("ollama request failed: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("Ollama returned status %d: %s", resp.StatusCode, string(bodyBytes))
+		return nil, fmt.Errorf("ollama returned status %d: %s", resp.StatusCode, string(bodyBytes))
 	}
 
 	var ollamaResp ollamaResponse
@@ -159,13 +159,13 @@ func (p *OllamaProvider) ListModels(ctx context.Context) ([]ModelInfo, error) {
 
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("Ollama request failed: %w", err)
+		return nil, fmt.Errorf("ollama request failed: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("Ollama returned status %d: %s", resp.StatusCode, string(bodyBytes))
+		return nil, fmt.Errorf("ollama returned status %d: %s", resp.StatusCode, string(bodyBytes))
 	}
 
 	var result struct {

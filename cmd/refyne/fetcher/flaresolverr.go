@@ -113,7 +113,7 @@ func (f *FlareSolverr) Solve(ctx context.Context, targetURL string, sessionID st
 		logger.Warn("FlareSolverr request failed", "url", targetURL, "error", err)
 		return nil, fmt.Errorf("%w: %v", ErrFlareSolverrUnavailable, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -177,7 +177,7 @@ func (f *FlareSolverr) CreateSession(ctx context.Context, sessionID string) erro
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrFlareSolverrUnavailable, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -221,7 +221,7 @@ func (f *FlareSolverr) DestroySession(ctx context.Context, sessionID string) err
 		logger.Debug("FlareSolverr session destroy failed", "session", sessionID, "error", err)
 		return nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {

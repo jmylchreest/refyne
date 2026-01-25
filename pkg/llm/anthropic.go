@@ -37,7 +37,7 @@ type AnthropicProvider struct {
 // NewAnthropicProvider creates a new Anthropic provider.
 func NewAnthropicProvider(cfg ProviderConfig) (*AnthropicProvider, error) {
 	if cfg.APIKey == "" {
-		return nil, fmt.Errorf("Anthropic API key required")
+		return nil, fmt.Errorf("anthropic API key required")
 	}
 
 	opts := []option.RequestOption{
@@ -132,7 +132,7 @@ func (p *AnthropicProvider) Execute(ctx context.Context, req Request) (*Response
 
 	resp, err := p.client.Messages.New(ctx, params)
 	if err != nil {
-		return nil, fmt.Errorf("Anthropic API error: %w", err)
+		return nil, fmt.Errorf("anthropic API error: %w", err)
 	}
 
 	// Extract content from response

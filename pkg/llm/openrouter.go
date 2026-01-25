@@ -69,11 +69,6 @@ func NewOpenRouterProvider(cfg ProviderConfig) (*OpenRouterProvider, error) {
 		model = "openrouter/auto"
 	}
 
-	timeout := cfg.Timeout
-	if timeout == 0 {
-		timeout = 120 * time.Second
-	}
-
 	return &OpenRouterProvider{
 		client:      client,
 		httpClient:  &http.Client{Timeout: 30 * time.Second}, // For metadata APIs
