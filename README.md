@@ -431,8 +431,8 @@ if result.Metadata != nil {
 
 | Package | Description |
 |---------|-------------|
-| `pkg/cleaner` | Cleaner interface and implementations (noop, markdown, trafilatura, readability, chain) |
-| `pkg/cleaner/refyne` | Configurable HTML cleaner with LLM-optimized output |
+| `pkg/cleaner` | Cleaner interface and implementations (noop, chain) |
+| `pkg/cleaner/refyne` | Configurable HTML cleaner with html/text/markdown output |
 | `pkg/fetcher` | HTTP fetching with static and dynamic (headless browser) modes |
 | `pkg/extractor` | LLM extraction with provider support (Anthropic, OpenAI, OpenRouter, Ollama) |
 | `pkg/schema` | Schema definition and JSON Schema generation |

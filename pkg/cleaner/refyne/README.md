@@ -236,13 +236,13 @@ The refyne cleaner implements the `cleaner.Cleaner` interface:
 ```go
 import (
     "github.com/jmylchreest/refyne/pkg/cleaner"
-    "github.com/jmylchreest/refyne/pkg/cleaner/refyne"
+    refynecleaner "github.com/jmylchreest/refyne/pkg/cleaner/refyne"
 )
 
-// Use in a chain
+// Use in a chain (though refyne alone usually suffices)
 chain := cleaner.NewChain(
-    refyne.New(refyne.DefaultConfig()),
-    cleaner.NewMarkdown(), // Convert to markdown after cleaning
+    refynecleaner.New(refynecleaner.PresetAggressive()),
+    cleaner.NewNoop(), // Additional processing if needed
 )
 
 cleaned, err := chain.Clean(html)
@@ -263,11 +263,11 @@ When using refyne via the refyne-api, you can pass custom selectors in the
     {
       "name": "refyne",
       "options": {
+        "output": "markdown",
         "remove_selectors": [".sidebar", "nav", "footer"],
         "keep_selectors": [".product-details", "#main-content"]
       }
-    },
-    {"name": "markdown"}
+    }
   ]
 }
 ```
@@ -300,7 +300,7 @@ When using refyne via the refyne-api, you can pass custom selectors in the
         ]
       }
     },
-    {"name": "markdown"}
+    {"name": "refyne", "options": {"output": "markdown"}}
   ]
 }
 ```
@@ -331,7 +331,7 @@ When using refyne via the refyne-api, you can pass custom selectors in the
         ]
       }
     },
-    {"name": "markdown"}
+    {"name": "refyne", "options": {"output": "markdown"}}
   ]
 }
 ```
@@ -350,7 +350,7 @@ Combine a preset with site-specific selectors:
         "keep_selectors": [".product-info", ".price-box"]
       }
     },
-    {"name": "markdown"}
+    {"name": "refyne", "options": {"output": "markdown"}}
   ]
 }
 ```
@@ -396,21 +396,18 @@ Typical performance on a complex e-commerce page (~200KB):
 - Output: ~2-5ms
 - Total: ~20-35ms
 
-## Comparison to Other Cleaners
+## Output Formats
 
-| Feature | Refyne | Trafilatura | Readability |
-|---------|--------|-------------|-------------|
-| Configurable | Highly | Limited | Limited |
-| Preserves forms | Yes | No | No |
-| Preserves tables | Yes | Optional | Yes |
-| Product pages | Good | Poor | Poor |
-| Articles | Good | Excellent | Excellent |
-| Token reduction | 50-80% | 80-95% | 70-90% |
-| False positives | Low | Medium | Medium |
+The refyne cleaner supports three output formats:
+
+| Format | Use Case | Token Reduction |
+|--------|----------|-----------------|
+| `html` | Downstream HTML processing | 50-70% |
+| `text` | Maximum compression, raw text only | 70-85% |
+| `markdown` | LLM consumption with structure preserved | 60-80% |
 
 ## Future Enhancements
 
-- [ ] Markdown output support
 - [ ] Learning/feedback mechanism for domain-specific tuning
 - [ ] Per-domain rule storage
 - [ ] Automatic threshold adjustment based on extraction outcomes
