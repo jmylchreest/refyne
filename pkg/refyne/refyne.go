@@ -10,6 +10,7 @@ import (
 	"github.com/jmylchreest/refyne/internal/crawler"
 	"github.com/jmylchreest/refyne/internal/logger"
 	"github.com/jmylchreest/refyne/pkg/cleaner"
+	refynecleaner "github.com/jmylchreest/refyne/pkg/cleaner/refyne"
 	"github.com/jmylchreest/refyne/pkg/extractor"
 	"github.com/jmylchreest/refyne/pkg/extractor/anthropic"
 	"github.com/jmylchreest/refyne/pkg/extractor/ollama"
@@ -81,12 +82,15 @@ func New(opts ...Option) (*Refyne, error) {
 		})
 	}
 
-	// Use injected cleaner or create a default markdown one
+	// Use injected cleaner or create a default refyne cleaner with markdown output
 	var cl cleaner.Cleaner
 	if cfg.Cleaner != nil {
 		cl = cfg.Cleaner
 	} else {
-		cl = cleaner.NewMarkdown()
+		// Default: refyne cleaner with markdown output for LLM-optimized content
+		refyneCfg := refynecleaner.DefaultConfig()
+		refyneCfg.Output = refynecleaner.OutputMarkdown
+		cl = refynecleaner.New(refyneCfg)
 	}
 
 	// Use injected extractor or create one based on provider

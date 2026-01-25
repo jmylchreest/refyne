@@ -4,7 +4,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -54,9 +53,6 @@ func TestNoopCleaner_Name(t *testing.T) {
 	}
 }
 
-// Markdown tests are in markdown_test.go (requires -tags markdown)
-// Trafilatura tests are in trafilatura_test.go (requires -tags trafilatura)
-
 // --- ChainCleaner Tests ---
 
 func TestChainCleaner_Empty(t *testing.T) {
@@ -87,28 +83,18 @@ func TestChainCleaner_SingleCleaner(t *testing.T) {
 	}
 }
 
-func TestChainCleaner_MultipleCleanes_Order(t *testing.T) {
-	// Create a chain with markdown cleaner
-	md := NewMarkdown()
-	c := NewChain(md)
+func TestChainCleaner_MultipleCleaners(t *testing.T) {
+	// Chain multiple noop cleaners - content should pass through unchanged
+	c := NewChain(NewNoop(), NewNoop())
 
-	html := `<h1>Title</h1><p>Content</p>`
-	got, err := c.Clean(html)
+	input := "<h1>Title</h1><p>Content</p>"
+	got, err := c.Clean(input)
 	if err != nil {
 		t.Fatalf("Clean() error = %v", err)
 	}
 
-	// If markdown is not available (stub), it passes through unchanged
-	if !md.IsAvailable() {
-		if got != html {
-			t.Errorf("expected passthrough with stub, got %q", got)
-		}
-		return
-	}
-
-	// If markdown is available, expect actual conversion
-	if !strings.Contains(got, "# Title") {
-		t.Errorf("expected markdown output, got %q", got)
+	if got != input {
+		t.Errorf("Clean() = %q, want %q", got, input)
 	}
 }
 
@@ -124,15 +110,15 @@ func (c *errorCleaner) Name() string {
 }
 
 func TestChainCleaner_ErrorPropagation(t *testing.T) {
-	c := NewChain(NewNoop(), &errorCleaner{}, NewMarkdown())
+	c := NewChain(NewNoop(), &errorCleaner{}, NewNoop())
 
 	_, err := c.Clean("test")
 	if err == nil {
 		t.Fatal("expected error to propagate")
 	}
 
-	if !strings.Contains(err.Error(), "test error") {
-		t.Errorf("expected error containing 'test error', got %v", err)
+	if err.Error() != "test error" {
+		t.Errorf("expected error 'test error', got %v", err)
 	}
 }
 
@@ -144,7 +130,7 @@ func TestChainCleaner_Name(t *testing.T) {
 	}{
 		{"empty", []Cleaner{}, "chain()"},
 		{"single", []Cleaner{NewNoop()}, "chain(noop)"},
-		{"double", []Cleaner{NewNoop(), NewMarkdown()}, "chain(noop->markdown)"},
+		{"double", []Cleaner{NewNoop(), NewNoop()}, "chain(noop->noop)"},
 	}
 
 	for _, tt := range tests {
@@ -154,32 +140,5 @@ func TestChainCleaner_Name(t *testing.T) {
 				t.Errorf("Name() = %q, want %q", got, tt.want)
 			}
 		})
-	}
-}
-
-// Integration tests with trafilatura are in trafilatura_test.go (requires -tags trafilatura)
-
-// --- Option Tests ---
-
-func TestWithStripLinks(t *testing.T) {
-	cfg := &markdownConfig{}
-	WithStripLinks(true)(cfg)
-
-	if !cfg.StripLinks {
-		t.Error("WithStripLinks(true) did not set StripLinks")
-	}
-
-	WithStripLinks(false)(cfg)
-	if cfg.StripLinks {
-		t.Error("WithStripLinks(false) did not unset StripLinks")
-	}
-}
-
-func TestWithStripImages(t *testing.T) {
-	cfg := &markdownConfig{}
-	WithStripImages(true)(cfg)
-
-	if !cfg.StripImages {
-		t.Error("WithStripImages(true) did not set StripImages")
 	}
 }
