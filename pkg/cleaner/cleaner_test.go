@@ -216,155 +216,7 @@ func TestCleanWhitespace_Empty(t *testing.T) {
 	}
 }
 
-// --- TrafilaturaCleaner Tests ---
-
-func TestTrafilaturaCleaner_DefaultConfig(t *testing.T) {
-	c := NewTrafilatura(nil)
-	if c == nil {
-		t.Fatal("NewTrafilatura(nil) returned nil")
-	}
-	if c.Name() != "trafilatura" {
-		t.Errorf("Name() = %q, want %q", c.Name(), "trafilatura")
-	}
-}
-
-func TestTrafilaturaCleaner_Clean_SimpleHTML(t *testing.T) {
-	c := NewTrafilatura(nil)
-
-	html := `<html><body><p>Main content paragraph.</p></body></html>`
-
-	got, err := c.Clean(html)
-	if err != nil {
-		t.Fatalf("Clean() error = %v", err)
-	}
-
-	// Trafilatura may return original if no content extracted, or extract the paragraph
-	if got == "" {
-		t.Error("Clean() returned empty string")
-	}
-}
-
-func TestTrafilaturaCleaner_OutputText(t *testing.T) {
-	c := NewTrafilatura(&TrafilaturaConfig{
-		Output: OutputText,
-	})
-
-	html := readTestdata(t, "article.html")
-
-	got, err := c.Clean(html)
-	if err != nil {
-		t.Fatalf("Clean() error = %v", err)
-	}
-
-	// Should return text, not HTML
-	if got == "" {
-		t.Error("Clean() returned empty string")
-	}
-}
-
-func TestTrafilaturaCleaner_OutputHTML(t *testing.T) {
-	c := NewTrafilatura(&TrafilaturaConfig{
-		Output: OutputHTML,
-	})
-
-	html := readTestdata(t, "article.html")
-
-	got, err := c.Clean(html)
-	if err != nil {
-		t.Fatalf("Clean() error = %v", err)
-	}
-
-	if got == "" {
-		t.Error("Clean() returned empty string")
-	}
-}
-
-func TestTrafilaturaCleaner_ExcludeComments(t *testing.T) {
-	c := NewTrafilatura(&TrafilaturaConfig{
-		Comments: Exclude, // This is actually the default
-	})
-
-	if c.opts.ExcludeComments != true {
-		t.Error("expected ExcludeComments to be true")
-	}
-}
-
-func TestTrafilaturaCleaner_IncludeComments(t *testing.T) {
-	c := NewTrafilatura(&TrafilaturaConfig{
-		Comments: Include,
-	})
-
-	if c.opts.ExcludeComments != false {
-		t.Error("expected ExcludeComments to be false when Comments=Include")
-	}
-}
-
-func TestTrafilaturaCleaner_ExcludeTables(t *testing.T) {
-	c := NewTrafilatura(&TrafilaturaConfig{
-		Tables: Exclude,
-	})
-
-	if c.opts.ExcludeTables != true {
-		t.Error("expected ExcludeTables to be true")
-	}
-}
-
-func TestTrafilaturaCleaner_IncludeLinks(t *testing.T) {
-	c := NewTrafilatura(&TrafilaturaConfig{
-		Links: Include, // This is the default
-	})
-
-	if c.opts.IncludeLinks != true {
-		t.Error("expected IncludeLinks to be true")
-	}
-}
-
-func TestTrafilaturaCleaner_ExcludeLinks(t *testing.T) {
-	c := NewTrafilatura(&TrafilaturaConfig{
-		Links: Exclude,
-	})
-
-	if c.opts.IncludeLinks != false {
-		t.Error("expected IncludeLinks to be false when Links=Exclude")
-	}
-}
-
-func TestTrafilaturaCleaner_DisableFallback(t *testing.T) {
-	c := NewTrafilatura(&TrafilaturaConfig{
-		Fallback: Exclude,
-	})
-
-	if c.opts.EnableFallback != false {
-		t.Error("expected EnableFallback to be false when Fallback=Exclude")
-	}
-}
-
-func TestTrafilaturaCleaner_NilResult_ReturnsOriginal(t *testing.T) {
-	c := NewTrafilatura(nil)
-
-	// Minimal HTML with no substantial content
-	// Trafilatura may return an error for truly minimal content, which is acceptable
-	html := "<html><body></body></html>"
-	got, err := c.Clean(html)
-
-	// Trafilatura returns error for insufficient content, which is acceptable
-	if err != nil {
-		// This is expected for minimal content
-		return
-	}
-
-	// If no error, it should return something (original or extracted)
-	if got == "" {
-		t.Error("Clean() returned empty string without error")
-	}
-}
-
-func TestTrafilaturaCleaner_Name(t *testing.T) {
-	c := NewTrafilatura(nil)
-	if got := c.Name(); got != "trafilatura" {
-		t.Errorf("Name() = %q, want %q", got, "trafilatura")
-	}
-}
+// Trafilatura tests are in trafilatura_test.go (requires -tags trafilatura)
 
 // --- ChainCleaner Tests ---
 
@@ -443,8 +295,7 @@ func TestChainCleaner_Name(t *testing.T) {
 	}{
 		{"empty", []Cleaner{}, "chain()"},
 		{"single", []Cleaner{NewNoop()}, "chain(noop)"},
-		{"double", []Cleaner{NewTrafilatura(nil), NewMarkdown()}, "chain(trafilatura->markdown)"},
-		{"triple", []Cleaner{NewNoop(), NewTrafilatura(nil), NewMarkdown()}, "chain(noop->trafilatura->markdown)"},
+		{"double", []Cleaner{NewNoop(), NewMarkdown()}, "chain(noop->markdown)"},
 	}
 
 	for _, tt := range tests {
@@ -457,32 +308,7 @@ func TestChainCleaner_Name(t *testing.T) {
 	}
 }
 
-// --- Integration Tests ---
-
-func TestChain_TrafilaturaToMarkdown(t *testing.T) {
-	c := NewChain(
-		NewTrafilatura(&TrafilaturaConfig{Output: OutputHTML}),
-		NewMarkdown(),
-	)
-
-	html := readTestdata(t, "article.html")
-
-	got, err := c.Clean(html)
-	if err != nil {
-		t.Fatalf("Clean() error = %v", err)
-	}
-
-	// Should have extracted and converted content
-	if got == "" {
-		t.Error("Clean() returned empty string")
-	}
-
-	// The article title should be present
-	if !strings.Contains(got, "Article Title") {
-		t.Logf("Output: %s", got)
-		// This is acceptable as trafilatura extraction may vary
-	}
-}
+// Integration tests with trafilatura are in trafilatura_test.go (requires -tags trafilatura)
 
 // --- Option Tests ---
 

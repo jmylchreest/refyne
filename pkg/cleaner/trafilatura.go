@@ -1,3 +1,5 @@
+//go:build trafilatura
+
 package cleaner
 
 import (
@@ -128,4 +130,9 @@ func (c *TrafilaturaCleaner) Clean(htmlContent string) (string, error) {
 // Name returns the cleaner type.
 func (c *TrafilaturaCleaner) Name() string {
 	return "trafilatura"
+}
+
+// IsAvailable returns true when trafilatura is compiled in.
+func (c *TrafilaturaCleaner) IsAvailable() bool {
+	return true
 }
