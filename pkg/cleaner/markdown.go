@@ -1,3 +1,5 @@
+//go:build markdown
+
 package cleaner
 
 import (
@@ -61,9 +63,14 @@ func (c *MarkdownCleaner) Name() string {
 	return "markdown"
 }
 
+// IsAvailable returns true when markdown cleaner is compiled in.
+func (c *MarkdownCleaner) IsAvailable() bool {
+	return true
+}
+
 // cleanWhitespace normalizes whitespace in the output.
 func cleanWhitespace(s string) string {
-	// Replace multiple blank lines with double newline
+	// Replace multiple blank lines with a single blank line (max 2 consecutive newlines)
 	lines := strings.Split(s, "\n")
 	var result []string
 	blankCount := 0
@@ -72,7 +79,8 @@ func cleanWhitespace(s string) string {
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" {
 			blankCount++
-			if blankCount <= 2 {
+			// Allow only 1 blank line (2 consecutive newlines: content\n + blank\n)
+			if blankCount <= 1 {
 				result = append(result, "")
 			}
 		} else {
