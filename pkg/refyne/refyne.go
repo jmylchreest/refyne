@@ -20,6 +20,18 @@ import (
 	"github.com/jmylchreest/refyne/pkg/schema"
 )
 
+// Exported error types for content validation.
+// These are re-exported from internal/crawler for use by consumers.
+var (
+	// ErrInsufficientContent is returned when cleaned content is too small for extraction.
+	// This typically indicates the page requires JavaScript rendering (dynamic fetch mode).
+	ErrInsufficientContent = crawler.ErrInsufficientContent
+)
+
+// InsufficientContentError provides details about why content was insufficient.
+// Use errors.As to check for this error type.
+type InsufficientContentError = crawler.InsufficientContentError
+
 // Version returns the module version of the refyne library.
 // This returns the actual version consumers pulled via go get (e.g., "v1.0.0").
 // Returns "(devel)" when built from source without version info.

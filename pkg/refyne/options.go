@@ -262,6 +262,17 @@ func WithOnURLsQueued(fn func(count int)) CrawlOption {
 	}
 }
 
+// WithMinContentSize sets the minimum cleaned content size in bytes.
+// If the cleaned content is smaller than this, extraction will fail with an error
+// instead of allowing the LLM to hallucinate from insufficient context.
+// This helps detect pages that require JavaScript rendering (dynamic fetch mode).
+// Default is 200 bytes. Set to 0 to disable the check.
+func WithMinContentSize(bytes int) CrawlOption {
+	return func(c *crawler.Config) {
+		c.MinContentSize = bytes
+	}
+}
+
 // SetLogger sets a custom slog.Logger for the refyne library.
 // This allows refyne logs to be integrated with your application's logging system.
 // Call this once at application startup before creating any Refyne instances.

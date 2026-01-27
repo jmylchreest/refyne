@@ -2,6 +2,7 @@ package crawler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -12,6 +13,24 @@ import (
 	"github.com/jmylchreest/refyne/pkg/fetcher"
 	"github.com/jmylchreest/refyne/pkg/schema"
 )
+
+// ErrInsufficientContent is returned when the cleaned content is smaller than MinContentSize.
+// This typically indicates the page requires JavaScript rendering (dynamic fetch mode).
+var ErrInsufficientContent = errors.New("insufficient content for extraction")
+
+// InsufficientContentError provides details about why content was insufficient.
+type InsufficientContentError struct {
+	ContentSize int // Actual content size in bytes
+	MinRequired int // Minimum required size in bytes
+}
+
+func (e *InsufficientContentError) Error() string {
+	return fmt.Sprintf("insufficient content: got %d bytes, need at least %d (page may require JavaScript rendering)", e.ContentSize, e.MinRequired)
+}
+
+func (e *InsufficientContentError) Unwrap() error {
+	return ErrInsufficientContent
+}
 
 // Result represents a single crawl/extraction result.
 type Result struct {
@@ -49,6 +68,9 @@ type Config struct {
 	// Extraction
 	ExtractFromSeeds bool // Whether to extract from seed pages (vs just follow links)
 
+	// Content validation
+	MinContentSize int // Minimum cleaned content size in bytes (default: 200). Returns error if content is smaller.
+
 	// Callbacks
 	OnURLsQueued func(count int) // Called when URLs are queued (for progress tracking)
 }
@@ -63,6 +85,7 @@ func DefaultConfig() Config {
 		Delay:            200 * time.Millisecond,
 		Concurrency:      3,
 		ExtractFromSeeds: false,
+		MinContentSize:   200, // Minimum 200 bytes of cleaned content
 	}
 }
 
@@ -267,6 +290,26 @@ func (c *Crawler) processURL(
 				"input_size", len(content.HTML),
 				"output_size", len(cleanedContent),
 				"duration", cleanDuration)
+		}
+
+		// Validate minimum content size before extraction
+		// This prevents LLM hallucination on pages with insufficient content
+		// (e.g., JavaScript-heavy sites that need browser rendering)
+		minSize := c.config.MinContentSize
+		if minSize > 0 && len(cleanedContent) < minSize {
+			logger.Info("insufficient content for extraction",
+				"url", url,
+				"content_size", len(cleanedContent),
+				"min_required", minSize,
+				"hint", "page may require JavaScript rendering (dynamic fetch mode)")
+			results <- Result{
+				URL:           url,
+				Depth:         depth,
+				Error:         &InsufficientContentError{ContentSize: len(cleanedContent), MinRequired: minSize},
+				FetchedAt:     content.FetchedAt,
+				FetchDuration: fetchDuration,
+			}
+			return
 		}
 
 		extractStart := time.Now()
