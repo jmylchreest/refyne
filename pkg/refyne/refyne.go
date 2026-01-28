@@ -54,12 +54,18 @@ type Result struct {
 	Model           string        // Actual model used (may differ from requested for auto-routing)
 	Provider        string        // Provider name (anthropic, openai, openrouter, ollama)
 	GenerationID    string        // Provider's generation ID (for cost tracking, e.g., OpenRouter)
+	FinishReason    string        // Why LLM stopped: "stop" (complete), "length" (truncated)
 	Cost            float64       // Actual cost in USD if provider returns it inline (check CostIncluded)
 	CostIncluded    bool          // True if Cost contains actual cost from provider
 	RetryCount      int
 	FetchDuration   time.Duration // Time to fetch the page
 	ExtractDuration time.Duration // Time for LLM extraction
 	Error           error
+}
+
+// IsTruncated returns true if the output was truncated due to hitting the max_tokens limit.
+func (r *Result) IsTruncated() bool {
+	return r.FinishReason == "length"
 }
 
 // TokenUsage tracks LLM token consumption.
@@ -201,6 +207,7 @@ func (r *Refyne) Extract(ctx context.Context, url string, s schema.Schema) (*Res
 		Model:           result.Model,
 		Provider:        result.Provider,
 		GenerationID:    result.GenerationID,
+		FinishReason:    result.FinishReason,
 		Cost:            result.Cost,
 		CostIncluded:    result.CostIncluded,
 		RetryCount:      result.RetryCount,
@@ -288,6 +295,7 @@ func (r *Refyne) CrawlMany(ctx context.Context, seeds []string, s schema.Schema,
 				result.Model = cr.Usage.Model
 				result.Provider = cr.Usage.Provider
 				result.GenerationID = cr.Usage.GenerationID
+				result.FinishReason = cr.Usage.FinishReason
 				result.Cost = cr.Usage.Cost
 				result.CostIncluded = cr.Usage.CostIncluded
 				result.RetryCount = cr.Usage.RetryCount

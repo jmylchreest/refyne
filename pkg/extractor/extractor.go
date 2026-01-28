@@ -49,6 +49,11 @@ type Result struct {
 	// Available from OpenRouter and some other providers.
 	GenerationID string
 
+	// FinishReason indicates why the LLM stopped generating.
+	// Common values: "stop" (completed), "length" (hit max_tokens limit).
+	// "length" indicates the output was truncated.
+	FinishReason string
+
 	// RetryCount is the number of retries performed.
 	RetryCount int
 
@@ -62,6 +67,11 @@ type Result struct {
 	// CostIncluded is true if the Cost field contains actual cost from the provider.
 	// When false, cost must be looked up via GenerationID or estimated.
 	CostIncluded bool
+}
+
+// IsTruncated returns true if the output was truncated due to hitting the max_tokens limit.
+func (r *Result) IsTruncated() bool {
+	return r.FinishReason == "length"
 }
 
 // Usage tracks token consumption for LLM-based extractors.

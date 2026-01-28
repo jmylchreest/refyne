@@ -186,6 +186,7 @@ func (e *BaseLLMExtractor) extractOnce(ctx context.Context, content string, s sc
 			Model:        resp.Model,
 			Provider:     e.name,
 			GenerationID: resp.GenerationID,
+			FinishReason: resp.FinishReason,
 			Cost:         resp.Cost,
 			CostIncluded: resp.CostIncluded,
 		}, fmt.Errorf("failed to parse response as JSON: %w (response: %s)", err, truncateForError(resp.Content))
@@ -203,6 +204,7 @@ func (e *BaseLLMExtractor) extractOnce(ctx context.Context, content string, s sc
 		Model:        resp.Model,
 		Provider:     e.name,
 		GenerationID: resp.GenerationID,
+		FinishReason: resp.FinishReason,
 		Cost:         resp.Cost,
 		CostIncluded: resp.CostIncluded,
 	}, nil
