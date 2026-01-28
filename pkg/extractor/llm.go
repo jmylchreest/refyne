@@ -56,6 +56,7 @@ func (e *BaseLLMExtractor) Extract(ctx context.Context, content string, s schema
 		"max_retries", e.config.MaxRetries)
 
 	var lastErr error
+	var lastResult *Result // Track the last result for FinishReason on failure
 	var totalUsage Usage
 	var totalDuration time.Duration
 
@@ -64,6 +65,7 @@ func (e *BaseLLMExtractor) Extract(ctx context.Context, content string, s schema
 
 		start := time.Now()
 		result, err := e.extractOnce(ctx, content, s, lastErr)
+		lastResult = result // Preserve for FinishReason access on failure
 		duration := time.Since(start)
 		totalDuration += duration
 
@@ -118,11 +120,23 @@ func (e *BaseLLMExtractor) Extract(ctx context.Context, content string, s schema
 	}
 
 	logger.Debug("extractor failed", "attempts", e.config.MaxRetries+1, "error", lastErr)
+	// Preserve FinishReason from last attempt for truncation detection
+	var finishReason string
+	var model string
+	var generationID string
+	if lastResult != nil {
+		finishReason = lastResult.FinishReason
+		model = lastResult.Model
+		generationID = lastResult.GenerationID
+	}
 	return &Result{
-		Usage:      totalUsage,
-		RetryCount: e.config.MaxRetries,
-		Duration:   totalDuration,
-		Provider:   e.name,
+		Usage:        totalUsage,
+		RetryCount:   e.config.MaxRetries,
+		Duration:     totalDuration,
+		Provider:     e.name,
+		Model:        model,
+		GenerationID: generationID,
+		FinishReason: finishReason,
 	}, fmt.Errorf("extraction failed after %d attempts: %w", e.config.MaxRetries+1, lastErr)
 }
 

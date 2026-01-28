@@ -189,32 +189,40 @@ func (r *Refyne) Extract(ctx context.Context, url string, s schema.Schema) (*Res
 	}
 
 	// Extract data using cleaned content
-	result, err := r.extractor.Extract(ctx, cleanedContent, s)
-	if err != nil {
-		return nil, fmt.Errorf("extraction failed: %w", err)
+	result, extractErr := r.extractor.Extract(ctx, cleanedContent, s)
+
+	// Build the result - include partial data even on error for truncation detection
+	refyneResult := &Result{
+		URL:       url,
+		FetchedAt: content.FetchedAt,
 	}
 
-	return &Result{
-		URL:        url,
-		FetchedAt:  content.FetchedAt,
-		Data:       result.Data,
-		Raw:        result.Raw,
-		RawContent: result.RawContent,
-		TokenUsage: TokenUsage{
+	if result != nil {
+		refyneResult.Data = result.Data
+		refyneResult.Raw = result.Raw
+		refyneResult.RawContent = result.RawContent
+		refyneResult.TokenUsage = TokenUsage{
 			InputTokens:  result.Usage.InputTokens,
 			OutputTokens: result.Usage.OutputTokens,
-		},
-		Model:           result.Model,
-		Provider:        result.Provider,
-		GenerationID:    result.GenerationID,
-		FinishReason:    result.FinishReason,
-		Cost:            result.Cost,
-		CostIncluded:    result.CostIncluded,
-		RetryCount:      result.RetryCount,
-		FetchDuration:   fetchDuration,
-		ExtractDuration: result.Duration,
-		Errors:          result.Errors,
-	}, nil
+		}
+		refyneResult.Model = result.Model
+		refyneResult.Provider = result.Provider
+		refyneResult.GenerationID = result.GenerationID
+		refyneResult.FinishReason = result.FinishReason
+		refyneResult.Cost = result.Cost
+		refyneResult.CostIncluded = result.CostIncluded
+		refyneResult.RetryCount = result.RetryCount
+		refyneResult.ExtractDuration = result.Duration
+		refyneResult.Errors = result.Errors
+	}
+	refyneResult.FetchDuration = fetchDuration
+
+	if extractErr != nil {
+		refyneResult.Error = fmt.Errorf("extraction failed: %w", extractErr)
+		return refyneResult, refyneResult.Error
+	}
+
+	return refyneResult, nil
 }
 
 // ExtractMany extracts data from multiple URLs concurrently.
