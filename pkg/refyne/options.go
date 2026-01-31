@@ -35,7 +35,7 @@ type Config struct {
 	// Extraction settings (used when Extractor is nil)
 	MaxRetries     int
 	Temperature    float64
-	MaxTokens      int  // Max output tokens for LLM responses (0 = default 8192)
+	MaxTokens      int  // Max output tokens for LLM responses (0 = default 16384)
 	MaxContentSize int  // Max input content size in bytes (0 = default 100KB)
 	StrictMode     bool // Use strict JSON schema mode (only supported by some models)
 
@@ -135,7 +135,7 @@ func WithTemperature(t float64) Option {
 }
 
 // WithMaxTokens sets the maximum output tokens for LLM responses.
-// Default is 8192 if not specified.
+// Default is 16384 if not specified (minimum supported by most modern LLMs).
 func WithMaxTokens(n int) Option {
 	return func(c *Config) {
 		c.MaxTokens = n

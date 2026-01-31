@@ -20,7 +20,8 @@ type LLMConfig struct {
 	// Temperature for LLM responses (default: 0.1).
 	Temperature float64
 
-	// MaxTokens for LLM responses (default: 8192).
+	// MaxTokens for LLM responses (default: 16384).
+	// This is the minimum that most modern LLMs support for output.
 	MaxTokens int
 
 	// MaxRetries for rate limit errors only (default: 1).
@@ -49,8 +50,8 @@ type LLMConfig struct {
 func DefaultLLMConfig() LLMConfig {
 	return LLMConfig{
 		Temperature:    0.1,
-		MaxTokens:      8192,
-		MaxRetries:     1, // Only retry rate limits, not JSON/validation errors
+		MaxTokens:      16384, // 16k is the minimum most modern models support
+		MaxRetries:     1,     // Only retry rate limits, not JSON/validation errors
 		MaxContentSize: 100000, // ~100KB
 	}
 }
