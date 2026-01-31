@@ -528,3 +528,70 @@ var (
 	_ CostTracker       = (*HeliconeProvider)(nil)
 	_ CostEstimator     = (*HeliconeProvider)(nil)
 )
+
+// ListHeliconeModels fetches all available models from Helicone's public model registry.
+// This is a standalone function that doesn't require a provider instance since the
+// models endpoint is public (no auth required).
+func ListHeliconeModels(ctx context.Context) ([]ModelInfo, error) {
+	client := &http.Client{Timeout: 30 * time.Second}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, HeliconeModelsURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// Models endpoint is public, no auth required
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("API error (status %d): %s", resp.StatusCode, string(body))
+	}
+
+	var result heliconeModelsResponse
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	// Parse models
+	models := make([]ModelInfo, 0, len(result.Data.Models))
+	for _, m := range result.Data.Models {
+		// Use first endpoint's pricing (primary provider)
+		var promptPrice, completionPrice float64
+		var maxOutput int
+		if len(m.Endpoints) > 0 {
+			pricing := m.Endpoints[0].Pricing
+			promptPrice = pricing.Prompt
+			completionPrice = pricing.Completion
+		}
+		if m.MaxOutput > 0 {
+			maxOutput = m.MaxOutput
+		}
+
+		info := ModelInfo{
+			ID:                  m.ID,
+			Name:                m.Name,
+			Description:         fmt.Sprintf("%s via Helicone", m.Author),
+			ContextLength:       m.ContextLength,
+			MaxCompletionTokens: maxOutput,
+			PromptPrice:         promptPrice,
+			CompletionPrice:     completionPrice,
+			IsFree:              promptPrice == 0 && completionPrice == 0,
+			Capabilities:        parseHeliconeCapabilities(m.Capabilities),
+		}
+
+		models = append(models, info)
+	}
+
+	return models, nil
+}
