@@ -8,12 +8,17 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
 
 const (
 	// HeliconeCloudBaseURL is the default Helicone cloud gateway URL.
 	HeliconeCloudBaseURL = "https://ai-gateway.helicone.ai"
+	// HeliconeAPIBaseURL is the Helicone API URL for metadata/cost lookups.
+	HeliconeAPIBaseURL = "https://api.helicone.ai"
+	// HeliconeModelsURL is the public model registry endpoint (no auth required).
+	HeliconeModelsURL = "https://api.helicone.ai/v1/public/model-registry/models"
 )
 
 // HeliconeProvider implements Provider for Helicone.
@@ -22,6 +27,12 @@ type HeliconeProvider struct {
 	cfg        ProviderConfig
 	httpClient *http.Client
 	selfHosted bool // True if using custom BaseURL (self-hosted mode)
+
+	// Model cache for pricing/capabilities
+	modelCache     map[string]*ModelInfo
+	modelCacheMu   sync.RWMutex
+	modelCacheTime time.Time
+	cacheTTL       time.Duration
 }
 
 // NewHeliconeProvider creates a new Helicone provider.
@@ -57,6 +68,8 @@ func NewHeliconeProvider(cfg ProviderConfig) (*HeliconeProvider, error) {
 		cfg:        cfg,
 		httpClient: &http.Client{Timeout: timeout},
 		selfHosted: selfHosted,
+		modelCache: make(map[string]*ModelInfo),
+		cacheTTL:   1 * time.Hour,
 	}, nil
 }
 
@@ -213,100 +226,305 @@ func (p *HeliconeProvider) parseResponse(body []byte, duration time.Duration) (*
 	}, nil
 }
 
-// ListModels returns available models through Helicone.
-// Helicone Cloud provides access to models from multiple providers.
+// ListModels fetches all available models from Helicone's public model registry.
+// Results are cached for the configured TTL.
 func (p *HeliconeProvider) ListModels(ctx context.Context) ([]ModelInfo, error) {
-	return []ModelInfo{
-		{
-			ID:            "gpt-4o",
-			Name:          "GPT-4o",
-			Description:   "Most capable GPT-4 model via Helicone",
-			ContextLength: 128000,
-			Capabilities: ModelCapabilities{
-				SupportsStructuredOutputs: true,
-				SupportsTools:             true,
-				SupportsStreaming:         true,
-				SupportsResponseFormat:    true,
-				SupportsVision:            true,
-			},
-		},
-		{
-			ID:            "gpt-4o-mini",
-			Name:          "GPT-4o Mini",
-			Description:   "Fast and affordable via Helicone",
-			ContextLength: 128000,
-			Capabilities: ModelCapabilities{
-				SupportsStructuredOutputs: true,
-				SupportsTools:             true,
-				SupportsStreaming:         true,
-				SupportsResponseFormat:    true,
-				SupportsVision:            true,
-			},
-		},
-		{
-			ID:            "gpt-4-turbo",
-			Name:          "GPT-4 Turbo",
-			Description:   "GPT-4 Turbo via Helicone",
-			ContextLength: 128000,
-			Capabilities: ModelCapabilities{
-				SupportsStructuredOutputs: true,
-				SupportsTools:             true,
-				SupportsStreaming:         true,
-				SupportsResponseFormat:    true,
-				SupportsVision:            true,
-			},
-		},
-		{
-			ID:            "claude-3-5-sonnet-20241022",
-			Name:          "Claude 3.5 Sonnet",
-			Description:   "Anthropic's Claude 3.5 Sonnet via Helicone",
-			ContextLength: 200000,
-			Capabilities: ModelCapabilities{
-				SupportsTools:     true,
-				SupportsStreaming: true,
-			},
-		},
-		{
-			ID:            "claude-3-haiku-20240307",
-			Name:          "Claude 3 Haiku",
-			Description:   "Anthropic's Claude 3 Haiku via Helicone",
-			ContextLength: 200000,
-			Capabilities: ModelCapabilities{
-				SupportsTools:     true,
-				SupportsStreaming: true,
-			},
-		},
-		{
-			ID:            "gemini-1.5-pro",
-			Name:          "Gemini 1.5 Pro",
-			Description:   "Google's Gemini 1.5 Pro via Helicone",
-			ContextLength: 1000000,
-			Capabilities: ModelCapabilities{
-				SupportsTools:     true,
-				SupportsStreaming: true,
-			},
-		},
-	}, nil
-}
-
-// GetModelInfo returns info for a specific model through Helicone.
-func (p *HeliconeProvider) GetModelInfo(ctx context.Context, modelID string) (*ModelInfo, error) {
-	models, err := p.ListModels(ctx)
-	if err != nil {
+	if err := p.ensureModelCache(ctx); err != nil {
 		return nil, err
 	}
 
-	for _, m := range models {
-		if m.ID == modelID {
-			return &m, nil
-		}
+	p.modelCacheMu.RLock()
+	defer p.modelCacheMu.RUnlock()
+
+	models := make([]ModelInfo, 0, len(p.modelCache))
+	for _, m := range p.modelCache {
+		models = append(models, *m)
+	}
+	return models, nil
+}
+
+// GetModelInfo returns metadata for a specific model.
+func (p *HeliconeProvider) GetModelInfo(ctx context.Context, modelID string) (*ModelInfo, error) {
+	if err := p.ensureModelCache(ctx); err != nil {
+		return nil, err
+	}
+
+	p.modelCacheMu.RLock()
+	defer p.modelCacheMu.RUnlock()
+
+	if info, ok := p.modelCache[modelID]; ok {
+		return info, nil
 	}
 	return nil, nil
 }
 
-// Ensure HeliconeProvider implements required interfaces
+// SupportsGenerationCost returns true - Helicone supports generation cost lookup.
+func (p *HeliconeProvider) SupportsGenerationCost() bool {
+	return true
+}
+
+// GetGenerationCost fetches the actual cost from Helicone for a generation.
+// Uses the Helicone Request API: GET /v1/request/{requestId}
+func (p *HeliconeProvider) GetGenerationCost(ctx context.Context, generationID string) (float64, error) {
+	if generationID == "" {
+		return 0, fmt.Errorf("generation ID required")
+	}
+
+	// Retry with delays - generation stats may not be immediately available
+	retryDelays := []time.Duration{200 * time.Millisecond, 500 * time.Millisecond, 1000 * time.Millisecond}
+
+	var lastErr error
+	for attempt := 0; attempt <= len(retryDelays); attempt++ {
+		if attempt > 0 {
+			time.Sleep(retryDelays[attempt-1])
+		}
+
+		cost, err := p.fetchGenerationCost(ctx, generationID)
+		if err == nil {
+			return cost, nil
+		}
+		lastErr = err
+
+		// Only retry on 404 (not found yet) - other errors are not recoverable
+		if !strings.Contains(err.Error(), "status 404") {
+			return 0, err
+		}
+	}
+
+	return 0, lastErr
+}
+
+func (p *HeliconeProvider) fetchGenerationCost(ctx context.Context, generationID string) (float64, error) {
+	url := fmt.Sprintf("%s/v1/request/%s", HeliconeAPIBaseURL, generationID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return 0, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+p.cfg.APIKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := p.httpClient.Do(req)
+	if err != nil {
+		return 0, fmt.Errorf("request failed: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return 0, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("API error (status %d): %s", resp.StatusCode, string(body))
+	}
+
+	// Helicone returns costUSD in the request response
+	var result struct {
+		Data struct {
+			CostUSD float64 `json:"costUSD"`
+			Cost    float64 `json:"cost"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return 0, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	// Prefer costUSD, fall back to cost
+	if result.Data.CostUSD > 0 {
+		return result.Data.CostUSD, nil
+	}
+	return result.Data.Cost, nil
+}
+
+// EstimateCost calculates estimated cost based on cached pricing.
+func (p *HeliconeProvider) EstimateCost(ctx context.Context, modelID string, inputTokens, outputTokens int) (float64, error) {
+	info, err := p.GetModelInfo(ctx, modelID)
+	if err != nil {
+		return 0, err
+	}
+
+	if info == nil {
+		// Model not found - return fallback estimate
+		return p.estimateCostFallback(modelID, inputTokens, outputTokens), nil
+	}
+
+	inputCost := float64(inputTokens) * info.PromptPrice
+	outputCost := float64(outputTokens) * info.CompletionPrice
+	return inputCost + outputCost, nil
+}
+
+// estimateCostFallback provides rough cost estimates when pricing data isn't available.
+func (p *HeliconeProvider) estimateCostFallback(model string, inputTokens, outputTokens int) float64 {
+	// Per million tokens
+	inputPricePer1M := 0.25
+	outputPricePer1M := 1.00
+
+	modelLower := strings.ToLower(model)
+	switch {
+	case strings.Contains(modelLower, "gpt-4") && !strings.Contains(modelLower, "mini"):
+		inputPricePer1M = 15.0
+		outputPricePer1M = 60.0
+	case strings.Contains(modelLower, "claude-3-opus"), strings.Contains(modelLower, "claude-opus"):
+		inputPricePer1M = 15.0
+		outputPricePer1M = 75.0
+	case strings.Contains(modelLower, "gpt-3.5"), strings.Contains(modelLower, "claude-3-sonnet"), strings.Contains(modelLower, "claude-3.5"):
+		inputPricePer1M = 3.0
+		outputPricePer1M = 15.0
+	case strings.Contains(modelLower, "gpt-4o-mini"), strings.Contains(modelLower, "claude-3-haiku"):
+		inputPricePer1M = 0.15
+		outputPricePer1M = 0.60
+	case strings.Contains(modelLower, "llama"), strings.Contains(modelLower, "mixtral"), strings.Contains(modelLower, "gemma"):
+		inputPricePer1M = 0.10
+		outputPricePer1M = 0.40
+	}
+
+	inputCost := float64(inputTokens) * inputPricePer1M / 1_000_000
+	outputCost := float64(outputTokens) * outputPricePer1M / 1_000_000
+	return inputCost + outputCost
+}
+
+// ensureModelCache refreshes the model cache if stale.
+func (p *HeliconeProvider) ensureModelCache(ctx context.Context) error {
+	p.modelCacheMu.RLock()
+	isStale := time.Since(p.modelCacheTime) > p.cacheTTL
+	p.modelCacheMu.RUnlock()
+
+	if !isStale {
+		return nil
+	}
+
+	return p.refreshModelCache(ctx)
+}
+
+func (p *HeliconeProvider) refreshModelCache(ctx context.Context) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, HeliconeModelsURL, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// Models endpoint is public, no auth required
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := p.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("request failed: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("API error (status %d): %s", resp.StatusCode, string(body))
+	}
+
+	var result heliconeModelsResponse
+	if err := json.Unmarshal(body, &result); err != nil {
+		return fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	// Parse and cache
+	cache := make(map[string]*ModelInfo, len(result.Data.Models))
+	for _, m := range result.Data.Models {
+		// Use first endpoint's pricing (primary provider)
+		var promptPrice, completionPrice float64
+		var maxOutput int
+		if len(m.Endpoints) > 0 {
+			pricing := m.Endpoints[0].Pricing
+			promptPrice = pricing.Prompt
+			completionPrice = pricing.Completion
+		}
+		if m.MaxOutput > 0 {
+			maxOutput = m.MaxOutput
+		}
+
+		info := &ModelInfo{
+			ID:                  m.ID,
+			Name:                m.Name,
+			Description:         fmt.Sprintf("%s via Helicone", m.Author),
+			ContextLength:       m.ContextLength,
+			MaxCompletionTokens: maxOutput,
+			PromptPrice:         promptPrice,
+			CompletionPrice:     completionPrice,
+			IsFree:              promptPrice == 0 && completionPrice == 0,
+			Capabilities:        parseHeliconeCapabilities(m.Capabilities),
+		}
+
+		cache[m.ID] = info
+	}
+
+	p.modelCacheMu.Lock()
+	p.modelCache = cache
+	p.modelCacheTime = time.Now()
+	p.modelCacheMu.Unlock()
+
+	return nil
+}
+
+// Helicone API response types
+
+type heliconeModelsResponse struct {
+	Data struct {
+		Models []heliconeModel `json:"models"`
+		Total  int             `json:"total"`
+	} `json:"data"`
+}
+
+type heliconeModel struct {
+	ID            string             `json:"id"`
+	Name          string             `json:"name"`
+	Author        string             `json:"author"`
+	ContextLength int                `json:"contextLength"`
+	MaxOutput     int                `json:"maxOutput"`
+	Endpoints     []heliconeEndpoint `json:"endpoints"`
+	Capabilities  []string           `json:"capabilities"`
+}
+
+type heliconeEndpoint struct {
+	Provider     string           `json:"provider"`
+	ProviderSlug string           `json:"providerSlug"`
+	Pricing      heliconePricing  `json:"pricing"`
+}
+
+type heliconePricing struct {
+	Prompt     float64 `json:"prompt"`
+	Completion float64 `json:"completion"`
+	CacheRead  float64 `json:"cacheRead"`
+	CacheWrite float64 `json:"cacheWrite"`
+	Thinking   float64 `json:"thinking"`
+}
+
+func parseHeliconeCapabilities(caps []string) ModelCapabilities {
+	result := ModelCapabilities{
+		SupportsStreaming: true, // Helicone always supports streaming
+	}
+
+	for _, c := range caps {
+		switch strings.ToLower(c) {
+		case "structured_outputs", "json_mode":
+			result.SupportsStructuredOutputs = true
+		case "tools", "function_calling":
+			result.SupportsTools = true
+		case "reasoning", "thinking":
+			result.SupportsReasoning = true
+		case "vision", "image":
+			result.SupportsVision = true
+		case "response_format":
+			result.SupportsResponseFormat = true
+		}
+	}
+
+	return result
+}
+
+// Ensure HeliconeProvider implements all interfaces
 var (
 	_ Provider          = (*HeliconeProvider)(nil)
 	_ ModelLister       = (*HeliconeProvider)(nil)
 	_ ModelInfoProvider = (*HeliconeProvider)(nil)
+	_ CostTracker       = (*HeliconeProvider)(nil)
+	_ CostEstimator     = (*HeliconeProvider)(nil)
 )
