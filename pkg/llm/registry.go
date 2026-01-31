@@ -14,6 +14,7 @@ var DefaultModels = map[string]string{
 	"openai":     "gpt-4o",
 	"openrouter": "openrouter/auto",
 	"ollama":     "llama3.2",
+	"helicone":   "gpt-5-nano",
 }
 
 var registry = map[string]ProviderFactory{}
@@ -32,13 +33,16 @@ func init() {
 	RegisterProvider("ollama", func(cfg ProviderConfig) (Provider, error) {
 		return NewOllamaProvider(cfg)
 	})
+	RegisterProvider("helicone", func(cfg ProviderConfig) (Provider, error) {
+		return NewHeliconeProvider(cfg)
+	})
 }
 
 // NewProvider creates a provider by name.
 func NewProvider(name string, cfg ProviderConfig) (Provider, error) {
 	factory, ok := registry[name]
 	if !ok {
-		return nil, fmt.Errorf("unknown provider: %s (available: anthropic, openai, openrouter, ollama)", name)
+		return nil, fmt.Errorf("unknown provider: %s (available: anthropic, openai, openrouter, ollama, helicone)", name)
 	}
 	return factory(cfg)
 }

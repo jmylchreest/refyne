@@ -35,6 +35,14 @@ type LLMConfig struct {
 	// When enabled, the model must return valid JSON exactly matching the schema.
 	// Default: false (for broader model compatibility).
 	StrictMode bool
+
+	// TargetProvider is the underlying provider for proxy providers (e.g., Helicone self-hosted).
+	// For example, "openai" or "anthropic" when routing through Helicone.
+	TargetProvider string
+
+	// TargetAPIKey is the underlying provider's API key for proxy providers.
+	// Required when using Helicone in self-hosted mode.
+	TargetAPIKey string
 }
 
 // DefaultLLMConfig returns sensible defaults for LLM extraction.

@@ -21,6 +21,10 @@ type Config struct {
 	APIKey   string
 	BaseURL  string
 
+	// For proxy providers (e.g., Helicone self-hosted)
+	TargetProvider string // Underlying provider (e.g., "openai", "anthropic")
+	TargetAPIKey   string // Underlying provider's API key
+
 	// Scraping settings
 	UserAgent string
 	Timeout   time.Duration
@@ -83,6 +87,22 @@ func WithAPIKey(key string) Option {
 func WithBaseURL(url string) Option {
 	return func(c *Config) {
 		c.BaseURL = url
+	}
+}
+
+// WithTargetProvider sets the underlying provider for proxy providers (e.g., Helicone self-hosted).
+// For Helicone self-hosted mode, this specifies the target provider like "openai" or "anthropic".
+func WithTargetProvider(provider string) Option {
+	return func(c *Config) {
+		c.TargetProvider = provider
+	}
+}
+
+// WithTargetAPIKey sets the underlying provider's API key for proxy providers.
+// For Helicone self-hosted mode, this is the OpenAI/Anthropic/etc API key.
+func WithTargetAPIKey(key string) Option {
+	return func(c *Config) {
+		c.TargetAPIKey = key
 	}
 }
 

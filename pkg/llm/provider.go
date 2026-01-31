@@ -134,6 +134,9 @@ type ProviderConfig struct {
 	// HTTPReferer and Title for OpenRouter attribution
 	HTTPReferer string
 	AppTitle    string
+	// For proxy providers (e.g., Helicone self-hosted)
+	TargetProvider string // Underlying provider (e.g., "openai", "anthropic")
+	TargetAPIKey   string // Underlying provider's API key
 }
 
 // DefaultProviderConfig returns sensible defaults.

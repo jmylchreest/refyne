@@ -12,10 +12,7 @@ import (
 	"github.com/jmylchreest/refyne/pkg/cleaner"
 	refynecleaner "github.com/jmylchreest/refyne/pkg/cleaner/refyne"
 	"github.com/jmylchreest/refyne/pkg/extractor"
-	"github.com/jmylchreest/refyne/pkg/extractor/anthropic"
-	"github.com/jmylchreest/refyne/pkg/extractor/ollama"
-	"github.com/jmylchreest/refyne/pkg/extractor/openai"
-	"github.com/jmylchreest/refyne/pkg/extractor/openrouter"
+	"github.com/jmylchreest/refyne/pkg/extractor/generic"
 	"github.com/jmylchreest/refyne/pkg/fetcher"
 	"github.com/jmylchreest/refyne/pkg/schema"
 )
@@ -111,7 +108,7 @@ func New(opts ...Option) (*Refyne, error) {
 		cl = refynecleaner.New(refyneCfg)
 	}
 
-	// Use injected extractor or create one based on provider
+	// Use injected extractor or create one via the registry
 	var ext extractor.Extractor
 	if cfg.Extractor != nil {
 		ext = cfg.Extractor
@@ -125,22 +122,18 @@ func New(opts ...Option) (*Refyne, error) {
 			MaxRetries:     cfg.MaxRetries,
 			MaxContentSize: cfg.MaxContentSize,
 			StrictMode:     cfg.StrictMode,
+			TargetProvider: cfg.TargetProvider,
+			TargetAPIKey:   cfg.TargetAPIKey,
+		}
+
+		// Default to Anthropic if no provider specified
+		provider := cfg.Provider
+		if provider == "" {
+			provider = "anthropic"
 		}
 
 		var err error
-		switch cfg.Provider {
-		case "openai":
-			ext, err = openai.New(llmCfg)
-		case "openrouter":
-			ext, err = openrouter.New(llmCfg)
-		case "ollama":
-			ext, err = ollama.New(llmCfg)
-		case "anthropic", "":
-			// Default to Anthropic
-			ext, err = anthropic.New(llmCfg)
-		default:
-			return nil, fmt.Errorf("unknown provider: %s (use anthropic, openai, openrouter, or ollama)", cfg.Provider)
-		}
+		ext, err = generic.New(provider, llmCfg)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create extractor: %w", err)
 		}
