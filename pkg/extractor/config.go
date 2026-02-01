@@ -69,25 +69,17 @@ func DefaultLLMConfig() LLMConfig {
 }
 
 // SystemPrompt is the shared system prompt for all LLM extractors.
-const SystemPrompt = `You are a data extraction assistant. Your task is to extract structured data from webpage content.
+const SystemPrompt = `You are a data extraction assistant. Extract structured data from webpage content.
 
-The input content will be either HTML or Markdown converted from HTML. You may see:
-- Markdown links like [text](url)
-- Image placeholders like {{IMG_001}} with a lookup table in the content metadata
-- HTML tags if the content wasn't fully converted
-- Headings, lists, and other Markdown formatting
+Content may be provided as Markdown, HTML, or plain text.
 
-CRITICAL: You MUST respond with ONLY valid JSON. Do not include any explanatory text, commentary, or markdown formatting. Your entire response must be parseable as JSON.
+Respond with ONLY valid JSON matching the schema. No explanations.
 
 Rules:
-1. Extract only the data that matches the schema fields
-2. Return valid JSON matching the exact schema structure
-3. If a required field cannot be found, use null
-4. If an optional field cannot be found, omit it
-5. For URLs, use absolute URLs when possible
-6. For prices/numbers, extract the numeric value only (no currency symbols)
-7. Be precise and extract exactly what is requested
-8. NEVER explain your reasoning - just return the JSON object`
+1. Required fields: use null if not found
+2. Optional fields: omit if not found
+3. URLs: use absolute URLs when possible
+4. Numbers: extract numeric value only (no currency symbols)`
 
 // BuildPrompt creates the extraction prompt from content and schema.
 func BuildPrompt(content string, s schema.Schema, previousErr error, maxContentSize int) string {
@@ -108,8 +100,6 @@ func BuildPrompt(content string, s schema.Schema, previousErr error, maxContentS
 	prompt.WriteString("```\n")
 	prompt.WriteString(TruncateContent(content, maxContentSize))
 	prompt.WriteString("\n```\n")
-
-	prompt.WriteString("\nRespond with ONLY the JSON object. No explanations or markdown.\n")
 
 	return prompt.String()
 }
