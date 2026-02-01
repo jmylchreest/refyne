@@ -11,6 +11,7 @@ import (
 	"github.com/jmylchreest/refyne/pkg/cleaner"
 	"github.com/jmylchreest/refyne/pkg/extractor"
 	"github.com/jmylchreest/refyne/pkg/fetcher"
+	"github.com/jmylchreest/refyne/pkg/llm"
 )
 
 // Config holds all Refyne configuration.
@@ -28,8 +29,8 @@ type Config struct {
 	// Scraping settings
 	UserAgent string
 	Timeout   time.Duration
-	Fetcher   fetcher.Fetcher   // Optional: inject a pre-configured fetcher
-	Cleaner   cleaner.Cleaner   // Optional: inject a content cleaner (default: markdown)
+	Fetcher   fetcher.Fetcher     // Optional: inject a pre-configured fetcher
+	Cleaner   cleaner.Cleaner     // Optional: inject a content cleaner (default: markdown)
 	Extractor extractor.Extractor // Optional: inject a custom extractor
 
 	// Extraction settings (used when Extractor is nil)
@@ -38,6 +39,9 @@ type Config struct {
 	MaxTokens      int  // Max output tokens for LLM responses (0 = default 16384)
 	MaxContentSize int  // Max input content size in bytes (0 = default 100KB)
 	StrictMode     bool // Use strict JSON schema mode (only supported by some models)
+
+	// Observability
+	Observer llm.LLMObserver // Optional: receives notifications about LLM calls
 
 	// Crawling settings
 	CrawlConfig crawler.Config
@@ -187,6 +191,27 @@ func WithCleaner(cl cleaner.Cleaner) Option {
 func WithExtractor(ext extractor.Extractor) Option {
 	return func(c *Config) {
 		c.Extractor = ext
+	}
+}
+
+// WithObserver sets an observer for LLM call notifications.
+// The observer receives callbacks after every LLM call (success or failure),
+// enabling integration with any observability backend (Langfuse, Sentry, etc.).
+//
+// Example usage with Langfuse:
+//
+//	observer := langfuse.NewObserver(langfuseClient)
+//	r, _ := refyne.New(refyne.WithObserver(observer))
+//
+// Example usage with a simple logger:
+//
+//	r, _ := refyne.New(refyne.WithObserver(llm.ObserverFunc(func(ctx context.Context, e llm.LLMCallEvent) {
+//	    log.Printf("LLM call: provider=%s model=%s tokens=%d duration=%v err=%v",
+//	        e.Provider, e.Model, e.Response.OutputTokens, e.Duration, e.Error)
+//	})))
+func WithObserver(obs llm.LLMObserver) Option {
+	return func(c *Config) {
+		c.Observer = obs
 	}
 }
 

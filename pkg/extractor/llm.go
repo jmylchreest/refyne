@@ -17,6 +17,7 @@ type BaseLLMExtractor struct {
 	provider llm.Provider
 	config   LLMConfig
 	name     string
+	observer llm.LLMObserver
 }
 
 // NewBaseLLMExtractor creates a new base extractor with the given provider.
@@ -44,6 +45,7 @@ func NewBaseLLMExtractor(name string, provider llm.Provider, cfg *LLMConfig) *Ba
 		provider: provider,
 		config:   config,
 		name:     name,
+		observer: cfg.Observer,
 	}
 }
 
@@ -64,7 +66,7 @@ func (e *BaseLLMExtractor) Extract(ctx context.Context, content string, s schema
 		logger.Debug("extractor attempt", "attempt", attempt+1, "max_attempts", e.config.MaxRetries+1)
 
 		start := time.Now()
-		result, err := e.extractOnce(ctx, content, s, lastErr)
+		result, err := e.extractOnceWithAttempt(ctx, content, s, lastErr, attempt)
 		lastResult = result // Preserve for FinishReason access on failure
 		duration := time.Since(start)
 		totalDuration += duration
@@ -142,6 +144,11 @@ func (e *BaseLLMExtractor) Extract(ctx context.Context, content string, s schema
 
 // extractOnce performs a single extraction attempt.
 func (e *BaseLLMExtractor) extractOnce(ctx context.Context, content string, s schema.Schema, previousErr error) (*Result, error) {
+	return e.extractOnceWithAttempt(ctx, content, s, previousErr, 0)
+}
+
+// extractOnceWithAttempt performs a single extraction attempt with attempt tracking for observer.
+func (e *BaseLLMExtractor) extractOnceWithAttempt(ctx context.Context, content string, s schema.Schema, previousErr error, attempt int) (*Result, error) {
 	logger.Debug("extractor building prompt",
 		"has_previous_error", previousErr != nil,
 		"max_content_size", e.config.MaxContentSize)
@@ -155,6 +162,11 @@ func (e *BaseLLMExtractor) extractOnce(ctx context.Context, content string, s sc
 		return &Result{}, fmt.Errorf("failed to generate JSON schema: %w", err)
 	}
 
+	messages := []llm.Message{
+		{Role: llm.RoleSystem, Content: SystemPrompt},
+		{Role: llm.RoleUser, Content: prompt},
+	}
+
 	logger.Debug("extractor calling LLM",
 		"provider", e.provider.Name(),
 		"model", e.provider.Model(),
@@ -162,16 +174,56 @@ func (e *BaseLLMExtractor) extractOnce(ctx context.Context, content string, s sc
 		"temperature", e.config.Temperature,
 		"strict_mode", e.config.StrictMode)
 
+	// Track timing for observer
+	startedAt := time.Now()
+
 	resp, err := e.provider.Execute(ctx, llm.Request{
-		Messages: []llm.Message{
-			{Role: llm.RoleSystem, Content: SystemPrompt},
-			{Role: llm.RoleUser, Content: prompt},
-		},
+		Messages:    messages,
 		MaxTokens:   e.config.MaxTokens,
 		Temperature: e.config.Temperature,
 		JSONSchema:  jsonSchema,
 		StrictMode:  e.config.StrictMode,
 	})
+
+	duration := time.Since(startedAt)
+
+	// Notify observer (handles both success and failure)
+	if e.observer != nil {
+		event := llm.LLMCallEvent{
+			Provider:  e.name,
+			Model:     e.provider.Model(),
+			Duration:  duration,
+			Attempt:   attempt,
+			StartedAt: startedAt,
+			Request: llm.LLMCallRequest{
+				Messages:         messages,
+				MaxTokens:        e.config.MaxTokens,
+				Temperature:      e.config.Temperature,
+				StrictMode:       e.config.StrictMode,
+				InputContentSize: len(content),
+			},
+		}
+
+		if err != nil {
+			event.Error = err
+		}
+
+		if resp != nil {
+			event.Model = resp.Model // Use actual model from response
+			event.Response = &llm.LLMCallResponse{
+				Content:      resp.Content,
+				InputTokens:  resp.Usage.InputTokens,
+				OutputTokens: resp.Usage.OutputTokens,
+				FinishReason: resp.FinishReason,
+				GenerationID: resp.GenerationID,
+				Cost:         resp.Cost,
+				CostIncluded: resp.CostIncluded,
+			}
+		}
+
+		e.observer.OnLLMCall(ctx, event)
+	}
+
 	if err != nil {
 		logger.Debug("extractor LLM completion failed", "error", err)
 		return &Result{

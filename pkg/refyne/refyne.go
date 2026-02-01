@@ -124,6 +124,7 @@ func New(opts ...Option) (*Refyne, error) {
 			StrictMode:     cfg.StrictMode,
 			TargetProvider: cfg.TargetProvider,
 			TargetAPIKey:   cfg.TargetAPIKey,
+			Observer:       cfg.Observer,
 		}
 
 		// Default to Anthropic if no provider specified

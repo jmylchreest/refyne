@@ -3,6 +3,7 @@ package extractor
 import (
 	"strings"
 
+	"github.com/jmylchreest/refyne/pkg/llm"
 	"github.com/jmylchreest/refyne/pkg/schema"
 )
 
@@ -44,6 +45,11 @@ type LLMConfig struct {
 	// TargetAPIKey is the underlying provider's API key for proxy providers.
 	// Required when using Helicone in self-hosted mode.
 	TargetAPIKey string
+
+	// Observer receives notifications about LLM calls for observability.
+	// Use this to integrate with Langfuse, Sentry, custom logging, etc.
+	// The observer is called after every LLM call (success or failure).
+	Observer llm.LLMObserver
 }
 
 // DefaultLLMConfig returns sensible defaults for LLM extraction.
