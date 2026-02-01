@@ -155,6 +155,46 @@ type Config struct {
 	// MinTextLength is the minimum text characters to keep an element.
 	MinTextLength int `json:"min_text_length"`
 
+	// === Content Deduplication ===
+
+	// DeduplicateTextBlocks removes repeated text blocks that appear multiple times.
+	// Useful for removing repeated CTAs, navigation text, "Read more" buttons.
+	// Only removes blocks >= MinDuplicateLength that appear 2+ times.
+	DeduplicateTextBlocks bool `json:"deduplicate_text_blocks"`
+
+	// MinDuplicateLength is the minimum character length for duplicate detection.
+	// Default: 15 characters.
+	MinDuplicateLength int `json:"min_duplicate_length"`
+
+	// RemoveRepeatedLinks removes links pointing to the same URL, keeping only the first.
+	// Caution: Different anchor text may provide valuable context.
+	RemoveRepeatedLinks bool `json:"remove_repeated_links"`
+
+	// === URL Cleaning ===
+
+	// StripTrackingParams removes UTM and common tracking parameters from URLs.
+	// Removes: utm_*, fbclid, gclid, ref, source, campaign, etc.
+	StripTrackingParams bool `json:"strip_tracking_params"`
+
+	// === Image Optimization ===
+
+	// StripSrcset removes srcset and sizes attributes from images.
+	// These contain multiple resolution URLs for responsive images that don't
+	// affect extraction - only src and alt matter.
+	StripSrcset bool `json:"strip_srcset"`
+
+	// === Post-Processing ===
+
+	// CollapseBlankLines reduces multiple consecutive blank lines to one.
+	// Applied after all other transformations.
+	CollapseBlankLines bool `json:"collapse_blank_lines"`
+
+	// === Boilerplate Detection ===
+
+	// StripCommonBoilerplate removes common footer/legal boilerplate patterns:
+	// "Copyright © 20XX", "All rights reserved", "Privacy Policy | Terms", etc.
+	StripCommonBoilerplate bool `json:"strip_common_boilerplate"`
+
 	// === Output ===
 
 	// Output specifies the output format: html, text, or markdown.
@@ -233,6 +273,17 @@ func DefaultConfig() *Config {
 		RemoveShortText:      false,
 		MinTextLength:        20,
 
+		// Safe token optimizations (enabled by default - no content loss)
+		StripTrackingParams: true,
+		StripSrcset:         true,
+		CollapseBlankLines:  true,
+
+		// Aggressive optimizations (disabled by default)
+		DeduplicateTextBlocks:  false,
+		MinDuplicateLength:     15,
+		RemoveRepeatedLinks:    false,
+		StripCommonBoilerplate: false,
+
 		// Common ad/tracking selectors that are safe to remove
 		RemoveSelectors: []string{
 			// Hidden elements
@@ -307,6 +358,15 @@ func PresetMinimal() *Config {
 		StripComments:      true,
 		CollapseWhitespace: true,
 		Output:             OutputHTML,
+
+		// All new heuristics disabled for maximum preservation
+		StripTrackingParams:    false,
+		StripSrcset:            false,
+		CollapseBlankLines:     false,
+		DeduplicateTextBlocks:  false,
+		MinDuplicateLength:     15,
+		RemoveRepeatedLinks:    false,
+		StripCommonBoilerplate: false,
 	}
 }
 
@@ -319,6 +379,12 @@ func PresetAggressive() *Config {
 	cfg.RemoveShortText = true
 	cfg.MinTextLength = 25
 	cfg.StripEmptyElements = true
+
+	// Enable all content reduction heuristics
+	cfg.DeduplicateTextBlocks = true
+	cfg.StripCommonBoilerplate = true
+	// Note: RemoveRepeatedLinks stays false - anchor text context matters
+
 	cfg.RemoveSelectors = append(cfg.RemoveSelectors,
 		"nav",
 		"header",
@@ -414,6 +480,29 @@ func (c *Config) Merge(other *Config) *Config {
 	}
 	if other.MinTextLength > 0 {
 		merged.MinTextLength = other.MinTextLength
+	}
+
+	// Merge new heuristics
+	if other.DeduplicateTextBlocks {
+		merged.DeduplicateTextBlocks = true
+	}
+	if other.MinDuplicateLength > 0 {
+		merged.MinDuplicateLength = other.MinDuplicateLength
+	}
+	if other.RemoveRepeatedLinks {
+		merged.RemoveRepeatedLinks = true
+	}
+	if other.StripTrackingParams {
+		merged.StripTrackingParams = true
+	}
+	if other.StripSrcset {
+		merged.StripSrcset = true
+	}
+	if other.CollapseBlankLines {
+		merged.CollapseBlankLines = true
+	}
+	if other.StripCommonBoilerplate {
+		merged.StripCommonBoilerplate = true
 	}
 
 	// Append selectors (deduplicated)

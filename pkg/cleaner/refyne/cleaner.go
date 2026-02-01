@@ -186,6 +186,36 @@ func (c *Cleaner) transform(doc *goquery.Document, result *Result) {
 	// 14. Whitespace normalization
 	result.Stats.AddPhase("whitespace", c.config.CollapseWhitespace)
 
+	// 15. Strip srcset/sizes from images
+	phase = result.Stats.AddPhase("srcset", c.config.StripSrcset)
+	if c.config.StripSrcset {
+		c.stripSrcset(doc, result, phase)
+	}
+
+	// 16. Strip tracking params from URLs
+	phase = result.Stats.AddPhase("tracking_params", c.config.StripTrackingParams)
+	if c.config.StripTrackingParams {
+		c.stripTrackingParams(doc, result, phase)
+	}
+
+	// 17. Remove repeated links
+	phase = result.Stats.AddPhase("repeated_links", c.config.RemoveRepeatedLinks)
+	if c.config.RemoveRepeatedLinks {
+		c.removeRepeatedLinks(doc, result, phase)
+	}
+
+	// 18. Deduplicate text blocks
+	phase = result.Stats.AddPhase("deduplicate", c.config.DeduplicateTextBlocks)
+	if c.config.DeduplicateTextBlocks {
+		c.deduplicateTextBlocks(doc, result, phase)
+	}
+
+	// 19. Strip boilerplate (near end, after other removals)
+	phase = result.Stats.AddPhase("boilerplate", c.config.StripCommonBoilerplate)
+	if c.config.StripCommonBoilerplate {
+		c.stripBoilerplate(doc, result, phase)
+	}
+
 	// Count remaining elements
 	doc.Find("*").Each(func(_ int, _ *goquery.Selection) {
 		result.Stats.ElementsKept++
@@ -537,19 +567,284 @@ var commentRegex = regexp.MustCompile(`<!--[\s\S]*?-->`)
 
 // generateOutput produces the final output in the configured format.
 func (c *Cleaner) generateOutput(doc *goquery.Document, result *Result) (string, error) {
+	var output string
+	var err error
+
 	switch c.config.Output {
 	case OutputText:
 		// Get HTML first, then convert to text
-		html, err := c.htmlOutput(doc)
+		html, htmlErr := c.htmlOutput(doc)
+		if htmlErr != nil {
+			return "", htmlErr
+		}
+		output = c.htmlToText(html)
+	case OutputMarkdown:
+		output = c.htmlToMarkdown(doc, result)
+	default:
+		// HTML output
+		output, err = c.htmlOutput(doc)
 		if err != nil {
 			return "", err
 		}
-		return c.htmlToText(html), nil
-	case OutputMarkdown:
-		return c.htmlToMarkdown(doc, result), nil
-	default:
-		// HTML output
-		return c.htmlOutput(doc)
 	}
+
+	// Post-processing: collapse blank lines
+	if c.config.CollapseBlankLines {
+		output = c.collapseBlankLines(output)
+	}
+
+	return output, nil
+}
+
+// stripSrcset removes srcset and sizes attributes from images.
+// These contain multiple resolution URLs for responsive images that don't
+// affect extraction - only src and alt matter.
+func (c *Cleaner) stripSrcset(doc *goquery.Document, result *Result, phase *PhaseStats) {
+	doc.Find("img[srcset], img[sizes], source[srcset], source[sizes]").Each(func(_ int, s *goquery.Selection) {
+		if s.AttrOr("srcset", "") != "" {
+			s.RemoveAttr("srcset")
+			result.Stats.AttributesRemoved++
+			phase.ElementsRemoved++
+			phase.Details["srcset"]++
+		}
+		if s.AttrOr("sizes", "") != "" {
+			s.RemoveAttr("sizes")
+			result.Stats.AttributesRemoved++
+			phase.Details["sizes"]++
+		}
+	})
+}
+
+// trackingParams is the set of URL query parameters to strip.
+var trackingParams = map[string]bool{
+	// Google Analytics / Ads
+	"utm_source": true, "utm_medium": true, "utm_campaign": true,
+	"utm_term": true, "utm_content": true, "utm_id": true,
+	"gclid": true, "gclsrc": true, "dclid": true,
+	// Facebook
+	"fbclid": true, "fb_action_ids": true, "fb_action_types": true,
+	"fb_source": true, "fb_ref": true,
+	// Microsoft/Bing
+	"msclkid": true,
+	// Twitter
+	"twclid": true,
+	// Generic tracking
+	"ref": true, "referer": true, "referrer": true,
+	"mc_cid": true, "mc_eid": true, // Mailchimp
+	"_ga": true, "_gl": true, // Google
+}
+
+// stripTrackingParams removes UTM and common tracking parameters from URLs.
+func (c *Cleaner) stripTrackingParams(doc *goquery.Document, result *Result, phase *PhaseStats) {
+	// Process href attributes on links
+	doc.Find("a[href]").Each(func(_ int, s *goquery.Selection) {
+		href, exists := s.Attr("href")
+		if !exists || href == "" {
+			return
+		}
+		cleaned := c.cleanURL(href)
+		if cleaned != href {
+			s.SetAttr("href", cleaned)
+			phase.ElementsRemoved++
+			phase.Details["href"]++
+		}
+	})
+
+	// Process src attributes on images
+	doc.Find("img[src]").Each(func(_ int, s *goquery.Selection) {
+		src, exists := s.Attr("src")
+		if !exists || src == "" {
+			return
+		}
+		cleaned := c.cleanURL(src)
+		if cleaned != src {
+			s.SetAttr("src", cleaned)
+			phase.ElementsRemoved++
+			phase.Details["src"]++
+		}
+	})
+}
+
+// cleanURL removes tracking parameters from a URL.
+func (c *Cleaner) cleanURL(rawURL string) string {
+	// Quick check - if no query string, nothing to do
+	if !strings.Contains(rawURL, "?") {
+		return rawURL
+	}
+
+	// Parse the URL
+	idx := strings.Index(rawURL, "?")
+	if idx == -1 {
+		return rawURL
+	}
+
+	base := rawURL[:idx]
+	query := rawURL[idx+1:]
+
+	// Handle fragment
+	fragment := ""
+	if fragIdx := strings.Index(query, "#"); fragIdx != -1 {
+		fragment = query[fragIdx:]
+		query = query[:fragIdx]
+	}
+
+	// Parse and filter query params
+	var kept []string
+	for _, param := range strings.Split(query, "&") {
+		if param == "" {
+			continue
+		}
+		key := param
+		if eqIdx := strings.Index(param, "="); eqIdx != -1 {
+			key = param[:eqIdx]
+		}
+		// Check against tracking params (case-insensitive for utm_*)
+		keyLower := strings.ToLower(key)
+		if trackingParams[keyLower] {
+			continue
+		}
+		// Also check utm_ prefix for any we might have missed
+		if strings.HasPrefix(keyLower, "utm_") {
+			continue
+		}
+		kept = append(kept, param)
+	}
+
+	// Rebuild URL
+	if len(kept) == 0 {
+		return base + fragment
+	}
+	return base + "?" + strings.Join(kept, "&") + fragment
+}
+
+// deduplicateTextBlocks removes repeated text blocks that appear multiple times.
+func (c *Cleaner) deduplicateTextBlocks(doc *goquery.Document, result *Result, phase *PhaseStats) {
+	minLen := c.config.MinDuplicateLength
+	if minLen <= 0 {
+		minLen = 15
+	}
+
+	// First pass: count text occurrences
+	textCounts := make(map[string]int)
+	doc.Find("p, span, div, a, li, td, th").Each(func(_ int, s *goquery.Selection) {
+		// Only count leaf-ish elements (no block children)
+		if s.Find("p, div, article, section").Length() > 0 {
+			return
+		}
+		text := strings.TrimSpace(s.Text())
+		if len(text) >= minLen {
+			textCounts[text]++
+		}
+	})
+
+	// Second pass: remove duplicates (keep first occurrence)
+	seen := make(map[string]bool)
+	doc.Find("p, span, div, a, li, td, th").Each(func(_ int, s *goquery.Selection) {
+		if s.Find("p, div, article, section").Length() > 0 {
+			return
+		}
+		if c.shouldKeep(s) {
+			return
+		}
+
+		text := strings.TrimSpace(s.Text())
+		if len(text) < minLen {
+			return
+		}
+
+		// Only process if this text appears more than once
+		if textCounts[text] <= 1 {
+			return
+		}
+
+		if seen[text] {
+			// This is a duplicate - remove it
+			tagName := goquery.NodeName(s)
+			result.Stats.RecordRemoval(tagName)
+			phase.ElementsRemoved++
+			phase.Details["duplicate:"+tagName]++
+			s.Remove()
+		} else {
+			// First occurrence - mark as seen
+			seen[text] = true
+		}
+	})
+}
+
+// removeRepeatedLinks removes links pointing to the same URL, keeping only the first.
+func (c *Cleaner) removeRepeatedLinks(doc *goquery.Document, result *Result, phase *PhaseStats) {
+	seenURLs := make(map[string]bool)
+
+	doc.Find("a[href]").Each(func(_ int, s *goquery.Selection) {
+		if c.shouldKeep(s) {
+			return
+		}
+
+		href, exists := s.Attr("href")
+		if !exists || href == "" || href == "#" {
+			return
+		}
+
+		// Normalize URL (remove fragment for comparison)
+		normalized := href
+		if idx := strings.Index(normalized, "#"); idx != -1 {
+			normalized = normalized[:idx]
+		}
+		normalized = strings.TrimSpace(normalized)
+
+		if seenURLs[normalized] {
+			// Replace link with its text content
+			text := s.Text()
+			s.ReplaceWithHtml(text)
+			phase.ElementsRemoved++
+			phase.Details["repeated_link"]++
+		} else {
+			seenURLs[normalized] = true
+		}
+	})
+}
+
+// boilerplatePatterns matches common boilerplate text.
+var boilerplatePatterns = []*regexp.Regexp{
+	regexp.MustCompile(`(?i)^\s*copyright\s*[©®]?\s*\d{4}`),
+	regexp.MustCompile(`(?i)^\s*[©®]\s*\d{4}`),
+	regexp.MustCompile(`(?i)^\s*all\s+rights\s+reserved\.?\s*$`),
+	regexp.MustCompile(`(?i)privacy\s+policy\s*[|•·\-]\s*terms`),
+	regexp.MustCompile(`(?i)^\s*powered\s+by\s+\w+\s*$`),
+	regexp.MustCompile(`(?i)^\s*built\s+with\s+\w+\s*$`),
+}
+
+// stripBoilerplate removes common footer/legal boilerplate patterns.
+func (c *Cleaner) stripBoilerplate(doc *goquery.Document, result *Result, phase *PhaseStats) {
+	doc.Find("p, span, div, footer, small").Each(func(_ int, s *goquery.Selection) {
+		if c.shouldKeep(s) {
+			return
+		}
+
+		text := strings.TrimSpace(s.Text())
+		if len(text) == 0 || len(text) > 200 {
+			// Skip empty or too long (likely real content)
+			return
+		}
+
+		for _, pattern := range boilerplatePatterns {
+			if pattern.MatchString(text) {
+				tagName := goquery.NodeName(s)
+				result.Stats.RecordRemoval(tagName)
+				phase.ElementsRemoved++
+				phase.Details["boilerplate:"+tagName]++
+				s.Remove()
+				return
+			}
+		}
+	})
+}
+
+// multipleBlankLines matches 3+ consecutive newlines.
+var multipleBlankLines = regexp.MustCompile(`\n{3,}`)
+
+// collapseBlankLines reduces multiple consecutive blank lines to one.
+func (c *Cleaner) collapseBlankLines(s string) string {
+	return multipleBlankLines.ReplaceAllString(s, "\n\n")
 }
 

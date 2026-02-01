@@ -859,3 +859,264 @@ func TestFrontmatterHints(t *testing.T) {
 		}
 	})
 }
+
+func TestStripSrcset(t *testing.T) {
+	t.Run("removes srcset and sizes from images", func(t *testing.T) {
+		html := `<html><body><img src="img.jpg" srcset="img-320.jpg 320w, img-640.jpg 640w" sizes="(max-width: 600px) 320px, 640px" alt="test"></body></html>`
+		c := New(&Config{
+			StripSrcset: true,
+		})
+		result, err := c.Clean(html)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if strings.Contains(result, "srcset") {
+			t.Errorf("expected srcset to be removed: %s", result)
+		}
+		if strings.Contains(result, "sizes") {
+			t.Errorf("expected sizes to be removed: %s", result)
+		}
+		if !strings.Contains(result, `src="img.jpg"`) {
+			t.Errorf("expected src to be preserved: %s", result)
+		}
+		if !strings.Contains(result, `alt="test"`) {
+			t.Errorf("expected alt to be preserved: %s", result)
+		}
+	})
+
+	t.Run("disabled by default in PresetMinimal", func(t *testing.T) {
+		html := `<html><body><img src="img.jpg" srcset="img-320.jpg 320w"></body></html>`
+		c := New(PresetMinimal())
+		result, err := c.Clean(html)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if !strings.Contains(result, "srcset") {
+			t.Errorf("expected srcset to be preserved in minimal mode: %s", result)
+		}
+	})
+}
+
+func TestStripTrackingParams(t *testing.T) {
+	t.Run("removes utm parameters from URLs", func(t *testing.T) {
+		html := `<html><body><a href="https://example.com/page?utm_source=google&utm_medium=cpc&id=123">Link</a></body></html>`
+		c := New(&Config{
+			StripTrackingParams: true,
+		})
+		result, err := c.Clean(html)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if strings.Contains(result, "utm_source") {
+			t.Errorf("expected utm_source to be removed: %s", result)
+		}
+		if strings.Contains(result, "utm_medium") {
+			t.Errorf("expected utm_medium to be removed: %s", result)
+		}
+		if !strings.Contains(result, "id=123") {
+			t.Errorf("expected non-tracking params to be preserved: %s", result)
+		}
+	})
+
+	t.Run("removes fbclid from URLs", func(t *testing.T) {
+		html := `<html><body><a href="https://example.com/page?fbclid=abc123&name=test">Link</a></body></html>`
+		c := New(&Config{
+			StripTrackingParams: true,
+		})
+		result, err := c.Clean(html)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if strings.Contains(result, "fbclid") {
+			t.Errorf("expected fbclid to be removed: %s", result)
+		}
+		if !strings.Contains(result, "name=test") {
+			t.Errorf("expected non-tracking params to be preserved: %s", result)
+		}
+	})
+
+	t.Run("handles URLs with only tracking params", func(t *testing.T) {
+		html := `<html><body><a href="https://example.com/page?utm_source=google">Link</a></body></html>`
+		c := New(&Config{
+			StripTrackingParams: true,
+		})
+		result, err := c.Clean(html)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if strings.Contains(result, "?") {
+			t.Errorf("expected query string to be removed entirely: %s", result)
+		}
+		if !strings.Contains(result, "https://example.com/page") {
+			t.Errorf("expected base URL to be preserved: %s", result)
+		}
+	})
+
+	t.Run("preserves fragment", func(t *testing.T) {
+		html := `<html><body><a href="https://example.com/page?utm_source=google#section">Link</a></body></html>`
+		c := New(&Config{
+			StripTrackingParams: true,
+		})
+		result, err := c.Clean(html)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if !strings.Contains(result, "#section") {
+			t.Errorf("expected fragment to be preserved: %s", result)
+		}
+	})
+}
+
+func TestDeduplicateTextBlocks(t *testing.T) {
+	t.Run("removes duplicate text blocks", func(t *testing.T) {
+		html := `<html><body>
+			<p>This is unique content here.</p>
+			<p>Read more about this topic</p>
+			<p>This is unique content here.</p>
+			<p>Read more about this topic</p>
+		</body></html>`
+		c := New(&Config{
+			DeduplicateTextBlocks: true,
+			MinDuplicateLength:    15,
+		})
+		result, err := c.Clean(html)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		// Count occurrences - should only appear once each
+		count := strings.Count(result, "This is unique content here")
+		if count != 1 {
+			t.Errorf("expected 'This is unique content here' to appear once, got %d: %s", count, result)
+		}
+
+		count = strings.Count(result, "Read more about this topic")
+		if count != 1 {
+			t.Errorf("expected 'Read more about this topic' to appear once, got %d: %s", count, result)
+		}
+	})
+
+	t.Run("keeps short duplicates", func(t *testing.T) {
+		html := `<html><body>
+			<p>Short</p>
+			<p>Short</p>
+		</body></html>`
+		c := New(&Config{
+			DeduplicateTextBlocks: true,
+			MinDuplicateLength:    15,
+		})
+		result, err := c.Clean(html)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		count := strings.Count(result, "Short")
+		if count != 2 {
+			t.Errorf("expected short text to appear twice, got %d: %s", count, result)
+		}
+	})
+}
+
+func TestStripCommonBoilerplate(t *testing.T) {
+	t.Run("removes copyright notices", func(t *testing.T) {
+		html := `<html><body>
+			<p>Main content here</p>
+			<footer><p>Copyright © 2024 Company</p></footer>
+		</body></html>`
+		c := New(&Config{
+			StripCommonBoilerplate: true,
+		})
+		result, err := c.Clean(html)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if strings.Contains(result, "Copyright") {
+			t.Errorf("expected copyright to be removed: %s", result)
+		}
+		if !strings.Contains(result, "Main content") {
+			t.Errorf("expected main content to be preserved: %s", result)
+		}
+	})
+
+	t.Run("removes all rights reserved", func(t *testing.T) {
+		html := `<html><body>
+			<p>Content</p>
+			<p>All rights reserved.</p>
+		</body></html>`
+		c := New(&Config{
+			StripCommonBoilerplate: true,
+		})
+		result, err := c.Clean(html)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if strings.Contains(strings.ToLower(result), "all rights reserved") {
+			t.Errorf("expected 'all rights reserved' to be removed: %s", result)
+		}
+	})
+}
+
+func TestCollapseBlankLines(t *testing.T) {
+	t.Run("collapses multiple blank lines", func(t *testing.T) {
+		html := `<html><body>
+			<p>First paragraph</p>
+
+
+
+			<p>Second paragraph</p>
+		</body></html>`
+		c := New(&Config{
+			Output:             OutputText,
+			CollapseBlankLines: true,
+		})
+		result, err := c.Clean(html)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		// Should not have more than 2 consecutive newlines
+		if strings.Contains(result, "\n\n\n") {
+			t.Errorf("expected multiple blank lines to be collapsed: %q", result)
+		}
+	})
+}
+
+func TestRemoveRepeatedLinks(t *testing.T) {
+	t.Run("removes repeated links keeping first", func(t *testing.T) {
+		html := `<html><body>
+			<a href="https://example.com/page">First link</a>
+			<a href="https://example.com/page">Second link</a>
+			<a href="https://example.com/other">Other link</a>
+		</body></html>`
+		c := New(&Config{
+			RemoveRepeatedLinks: true,
+		})
+		result, err := c.Clean(html)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		// First link should remain as a link
+		if !strings.Contains(result, `href="https://example.com/page"`) {
+			t.Errorf("expected first link to be preserved: %s", result)
+		}
+
+		// Should contain "Second link" text but not as a link
+		if !strings.Contains(result, "Second link") {
+			t.Errorf("expected second link text to be preserved: %s", result)
+		}
+
+		// Other link should remain
+		if !strings.Contains(result, `href="https://example.com/other"`) {
+			t.Errorf("expected other link to be preserved: %s", result)
+		}
+	})
+}
