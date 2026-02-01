@@ -61,6 +61,8 @@ func New(providerName string, cfg *extractor.LLMConfig) (*Extractor, error) {
 		Model:          model,
 		TargetProvider: cfg.TargetProvider,
 		TargetAPIKey:   cfg.TargetAPIKey,
+		HTTPReferer:    cfg.HTTPReferer,
+		AppTitle:       cfg.AppTitle,
 	})
 	if err != nil {
 		return &Extractor{available: false}, err

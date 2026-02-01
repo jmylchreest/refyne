@@ -26,6 +26,10 @@ type Config struct {
 	TargetProvider string // Underlying provider (e.g., "openai", "anthropic")
 	TargetAPIKey   string // Underlying provider's API key
 
+	// Provider attribution (for OpenRouter)
+	HTTPReferer string // HTTP-Referer header for OpenRouter attribution
+	AppTitle    string // X-Title header for OpenRouter attribution
+
 	// Scraping settings
 	UserAgent string
 	Timeout   time.Duration
@@ -107,6 +111,20 @@ func WithTargetProvider(provider string) Option {
 func WithTargetAPIKey(key string) Option {
 	return func(c *Config) {
 		c.TargetAPIKey = key
+	}
+}
+
+// WithHTTPReferer sets the HTTP-Referer header for OpenRouter attribution.
+func WithHTTPReferer(referer string) Option {
+	return func(c *Config) {
+		c.HTTPReferer = referer
+	}
+}
+
+// WithAppTitle sets the X-Title header for OpenRouter attribution.
+func WithAppTitle(title string) Option {
+	return func(c *Config) {
+		c.AppTitle = title
 	}
 }
 

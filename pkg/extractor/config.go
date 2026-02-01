@@ -46,6 +46,12 @@ type LLMConfig struct {
 	// Required when using Helicone in self-hosted mode.
 	TargetAPIKey string
 
+	// HTTPReferer sets the HTTP-Referer header for OpenRouter attribution.
+	HTTPReferer string
+
+	// AppTitle sets the X-Title header for OpenRouter attribution.
+	AppTitle string
+
 	// Observer receives notifications about LLM calls for observability.
 	// Use this to integrate with Langfuse, Sentry, custom logging, etc.
 	// The observer is called after every LLM call (success or failure).
