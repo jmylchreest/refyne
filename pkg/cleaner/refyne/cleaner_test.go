@@ -971,6 +971,89 @@ func TestStripTrackingParams(t *testing.T) {
 			t.Errorf("expected fragment to be preserved: %s", result)
 		}
 	})
+
+	t.Run("removes tracking params from image src", func(t *testing.T) {
+		html := `<html><body><img src="https://example.com/image.jpg?utm_source=email&width=100"></body></html>`
+		c := New(&Config{
+			StripTrackingParams: true,
+		})
+		result, err := c.Clean(html)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if strings.Contains(result, "utm_source") {
+			t.Errorf("expected utm_source to be removed from img src: %s", result)
+		}
+		if !strings.Contains(result, "width=100") {
+			t.Errorf("expected non-tracking params to be preserved in img src: %s", result)
+		}
+	})
+
+	t.Run("handles empty href", func(t *testing.T) {
+		html := `<html><body><a href="">Empty</a><a href="https://example.com?fbclid=123">Link</a></body></html>`
+		c := New(&Config{
+			StripTrackingParams: true,
+		})
+		result, err := c.Clean(html)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if strings.Contains(result, "fbclid") {
+			t.Errorf("expected fbclid to be removed: %s", result)
+		}
+	})
+
+	t.Run("handles empty img src", func(t *testing.T) {
+		html := `<html><body><img src=""><img src="https://example.com/img.jpg?_ga=123&size=large"></body></html>`
+		c := New(&Config{
+			StripTrackingParams: true,
+		})
+		result, err := c.Clean(html)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if strings.Contains(result, "_ga") {
+			t.Errorf("expected _ga to be removed: %s", result)
+		}
+		if !strings.Contains(result, "size=large") {
+			t.Errorf("expected size param to be preserved: %s", result)
+		}
+	})
+
+	t.Run("removes multiple tracking params", func(t *testing.T) {
+		html := `<html><body><a href="https://example.com?utm_source=google&utm_medium=cpc&utm_campaign=test&gclid=abc&msclkid=def&twclid=ghi&mc_cid=jkl">Link</a></body></html>`
+		c := New(&Config{
+			StripTrackingParams: true,
+		})
+		result, err := c.Clean(html)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		for _, param := range []string{"utm_source", "utm_medium", "utm_campaign", "gclid", "msclkid", "twclid", "mc_cid"} {
+			if strings.Contains(result, param) {
+				t.Errorf("expected %s to be removed: %s", param, result)
+			}
+		}
+	})
+
+	t.Run("handles URL without query string", func(t *testing.T) {
+		html := `<html><body><a href="https://example.com/page">Link</a></body></html>`
+		c := New(&Config{
+			StripTrackingParams: true,
+		})
+		result, err := c.Clean(html)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if !strings.Contains(result, "https://example.com/page") {
+			t.Errorf("expected URL to remain unchanged: %s", result)
+		}
+	})
 }
 
 func TestDeduplicateTextBlocks(t *testing.T) {
