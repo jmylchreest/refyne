@@ -86,6 +86,24 @@ func NewOpenRouterProvider(cfg ProviderConfig) (*OpenRouterProvider, error) {
 func (p *OpenRouterProvider) Execute(ctx context.Context, req Request) (*Response, error) {
 	start := time.Now()
 
+	// Check if any message has cache control - if so, use raw HTTP request
+	hasCacheControl := false
+	for _, msg := range req.Messages {
+		if msg.CacheControl != "" {
+			hasCacheControl = true
+			break
+		}
+	}
+
+	if hasCacheControl {
+		return p.executeWithCacheControl(ctx, req, start)
+	}
+
+	return p.executeStandard(ctx, req, start)
+}
+
+// executeStandard uses the OpenAI SDK for requests without cache control.
+func (p *OpenRouterProvider) executeStandard(ctx context.Context, req Request, start time.Time) (*Response, error) {
 	messages := make([]openai.ChatCompletionMessageParamUnion, 0, len(req.Messages))
 	for _, msg := range req.Messages {
 		switch msg.Role {
@@ -143,6 +161,139 @@ func (p *OpenRouterProvider) Execute(ctx context.Context, req Request) (*Respons
 		GenerationID: resp.ID,
 		Duration:     time.Since(start),
 	}, nil
+}
+
+// executeWithCacheControl uses raw HTTP to support cache_control on messages.
+func (p *OpenRouterProvider) executeWithCacheControl(ctx context.Context, req Request, start time.Time) (*Response, error) {
+	// Build messages with cache_control support
+	messages := make([]map[string]any, 0, len(req.Messages))
+	for _, msg := range req.Messages {
+		m := map[string]any{
+			"role":    string(msg.Role),
+			"content": msg.Content,
+		}
+		if msg.CacheControl != "" {
+			m["cache_control"] = map[string]string{"type": string(msg.CacheControl)}
+		}
+		messages = append(messages, m)
+	}
+
+	maxTokens := req.MaxTokens
+	if maxTokens == 0 {
+		maxTokens = 4096
+	}
+
+	body := map[string]any{
+		"model":       p.model,
+		"messages":    messages,
+		"max_tokens":  maxTokens,
+		"temperature": req.Temperature,
+	}
+
+	// Add JSON schema if provided
+	if req.JSONSchema != nil {
+		body["response_format"] = map[string]any{
+			"type": "json_schema",
+			"json_schema": map[string]any{
+				"name":   "extraction_result",
+				"schema": req.JSONSchema,
+				"strict": req.StrictMode,
+			},
+		}
+	}
+
+	bodyBytes, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	baseURL := p.cfg.BaseURL
+	if baseURL == "" {
+		baseURL = openRouterBaseURL
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/chat/completions", strings.NewReader(string(bodyBytes)))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	httpReq.Header.Set("Authorization", "Bearer "+p.apiKey)
+	httpReq.Header.Set("Content-Type", "application/json")
+	if p.httpReferer != "" {
+		httpReq.Header.Set("HTTP-Referer", p.httpReferer)
+	}
+	if p.appTitle != "" {
+		httpReq.Header.Set("X-Title", p.appTitle)
+	}
+
+	// Use a longer timeout client for completions
+	client := &http.Client{Timeout: 120 * time.Second}
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("OpenRouter API error (status %d): %s", resp.StatusCode, string(respBody))
+	}
+
+	var result openRouterChatResponse
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	if len(result.Choices) == 0 {
+		return nil, fmt.Errorf("no choices in response")
+	}
+
+	response := &Response{
+		Content:      result.Choices[0].Message.Content,
+		FinishReason: result.Choices[0].FinishReason,
+		Usage: Usage{
+			InputTokens:  result.Usage.PromptTokens,
+			OutputTokens: result.Usage.CompletionTokens,
+		},
+		Model:        result.Model,
+		GenerationID: result.ID,
+		Duration:     time.Since(start),
+	}
+
+	// Extract cache stats if available
+	if result.Usage.CacheDiscount != 0 || result.Usage.CachedTokens > 0 {
+		response.CacheStats = &CacheStats{
+			CachedTokens:  result.Usage.CachedTokens,
+			CacheDiscount: result.Usage.CacheDiscount,
+			CacheHit:      result.Usage.CachedTokens > 0,
+		}
+	}
+
+	return response, nil
+}
+
+// openRouterChatResponse is the response structure for chat completions with cache info.
+type openRouterChatResponse struct {
+	ID      string `json:"id"`
+	Model   string `json:"model"`
+	Choices []struct {
+		Message struct {
+			Role    string `json:"role"`
+			Content string `json:"content"`
+		} `json:"message"`
+		FinishReason string `json:"finish_reason"`
+	} `json:"choices"`
+	Usage struct {
+		PromptTokens     int     `json:"prompt_tokens"`
+		CompletionTokens int     `json:"completion_tokens"`
+		TotalTokens      int     `json:"total_tokens"`
+		CachedTokens     int     `json:"cached_tokens,omitempty"`
+		CacheDiscount    float64 `json:"cache_discount,omitempty"`
+	} `json:"usage"`
 }
 
 // Name returns the provider identifier.

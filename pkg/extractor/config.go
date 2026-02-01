@@ -56,15 +56,22 @@ type LLMConfig struct {
 	// Use this to integrate with Langfuse, Sentry, custom logging, etc.
 	// The observer is called after every LLM call (success or failure).
 	Observer llm.LLMObserver
+
+	// EnablePromptCaching enables prompt caching on supported providers.
+	// When enabled, the system prompt is cached to reduce latency and costs.
+	// Supported by: Anthropic, OpenRouter (Anthropic/Gemini models), Gemini.
+	// Default: true (caching is beneficial when available).
+	EnablePromptCaching bool
 }
 
 // DefaultLLMConfig returns sensible defaults for LLM extraction.
 func DefaultLLMConfig() LLMConfig {
 	return LLMConfig{
-		Temperature:    0.1,
-		MaxTokens:      16384, // 16k is the minimum most modern models support
-		MaxRetries:     1,     // Only retry rate limits, not JSON/validation errors
-		MaxContentSize: 100000, // ~100KB
+		Temperature:         0.1,
+		MaxTokens:           16384, // 16k is the minimum most modern models support
+		MaxRetries:          1,     // Only retry rate limits, not JSON/validation errors
+		MaxContentSize:      100000, // ~100KB
+		EnablePromptCaching: true,  // Enable by default - beneficial when supported
 	}
 }
 

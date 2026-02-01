@@ -157,8 +157,13 @@ func (e *BaseLLMExtractor) extractOnceWithAttempt(ctx context.Context, content s
 		return &Result{}, fmt.Errorf("failed to generate JSON schema: %w", err)
 	}
 
+	// Build messages with optional prompt caching
+	systemMsg := llm.Message{Role: llm.RoleSystem, Content: SystemPrompt}
+	if e.config.EnablePromptCaching {
+		systemMsg.CacheControl = llm.CacheControlEphemeral
+	}
 	messages := []llm.Message{
-		{Role: llm.RoleSystem, Content: SystemPrompt},
+		systemMsg,
 		{Role: llm.RoleUser, Content: prompt},
 	}
 

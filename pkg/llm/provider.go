@@ -15,10 +15,23 @@ const (
 	RoleAssistant Role = "assistant"
 )
 
+// CacheControlType specifies the cache control behavior for a message.
+type CacheControlType string
+
+const (
+	// CacheControlEphemeral marks the message for caching with provider-default TTL.
+	// Supported by: Anthropic, OpenRouter (Anthropic/Gemini models), Gemini
+	CacheControlEphemeral CacheControlType = "ephemeral"
+)
+
 // Message represents a chat message.
 type Message struct {
 	Role    Role
 	Content string
+	// CacheControl enables prompt caching for this message on supported providers.
+	// Set to CacheControlEphemeral to cache the message prefix.
+	// Only effective on providers/models that support prompt caching.
+	CacheControl CacheControlType
 }
 
 // Request represents a completion request to the LLM.
@@ -46,6 +59,18 @@ type Response struct {
 	Cost         float64 // Actual cost if provider returns it inline (0 if not available)
 	CostIncluded bool    // True if Cost field contains actual cost from provider
 	Duration     time.Duration
+	// CacheStats contains prompt caching information if available.
+	CacheStats *CacheStats
+}
+
+// CacheStats contains information about prompt caching for a request.
+type CacheStats struct {
+	// CachedTokens is the number of input tokens that were served from cache.
+	CachedTokens int
+	// CacheDiscount is the cost savings from caching (negative = cache write cost).
+	CacheDiscount float64
+	// CacheHit indicates if the request hit the cache.
+	CacheHit bool
 }
 
 // Provider is the core interface that all LLM backends must implement.
