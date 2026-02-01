@@ -142,11 +142,6 @@ func (e *BaseLLMExtractor) Extract(ctx context.Context, content string, s schema
 	}, fmt.Errorf("extraction failed after %d attempts: %w", e.config.MaxRetries+1, lastErr)
 }
 
-// extractOnce performs a single extraction attempt.
-func (e *BaseLLMExtractor) extractOnce(ctx context.Context, content string, s schema.Schema, previousErr error) (*Result, error) {
-	return e.extractOnceWithAttempt(ctx, content, s, previousErr, 0)
-}
-
 // extractOnceWithAttempt performs a single extraction attempt with attempt tracking for observer.
 func (e *BaseLLMExtractor) extractOnceWithAttempt(ctx context.Context, content string, s schema.Schema, previousErr error, attempt int) (*Result, error) {
 	logger.Debug("extractor building prompt",
