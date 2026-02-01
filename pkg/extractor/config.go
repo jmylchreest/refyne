@@ -71,6 +71,12 @@ func DefaultLLMConfig() LLMConfig {
 // SystemPrompt is the shared system prompt for all LLM extractors.
 const SystemPrompt = `You are a data extraction assistant. Your task is to extract structured data from webpage content.
 
+The input content will be either HTML or Markdown converted from HTML. You may see:
+- Markdown links like [text](url)
+- Image placeholders like {{IMG_001}} with a lookup table in the content metadata
+- HTML tags if the content wasn't fully converted
+- Headings, lists, and other Markdown formatting
+
 CRITICAL: You MUST respond with ONLY valid JSON. Do not include any explanatory text, commentary, or markdown formatting. Your entire response must be parseable as JSON.
 
 Rules:
