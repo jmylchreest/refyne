@@ -1,4 +1,8 @@
 // Package llm provides a unified interface for LLM providers.
+//
+// Deprecated: Use pkg/model/inference instead. This package is retained for
+// backwards compatibility. The provider implementations here are wrapped by
+// inference.Remote to provide the new Inferencer interface.
 package llm
 
 import (

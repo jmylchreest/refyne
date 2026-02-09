@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jmylchreest/refyne/pkg/llm"
+	"github.com/jmylchreest/refyne/pkg/model/inference"
 	"github.com/jmylchreest/refyne/internal/logger"
 	"github.com/jmylchreest/refyne/pkg/schema"
 )
@@ -14,14 +15,68 @@ import (
 // BaseLLMExtractor provides common extraction logic for LLM-based extractors.
 // Provider-specific extractors embed this and provide their own LLM provider.
 type BaseLLMExtractor struct {
-	provider llm.Provider
-	config   LLMConfig
-	name     string
-	observer llm.LLMObserver
+	provider   llm.Provider
+	inferencer inference.Inferencer // New: wraps provider via inference layer
+	config     LLMConfig
+	name       string
+	observer   llm.LLMObserver
+}
+
+// NewFromInferencer creates a BaseLLMExtractor backed by any Inferencer.
+// This is the preferred constructor for new code.
+func NewFromInferencer(inf inference.Inferencer, opts ...ExtractorOption) *BaseLLMExtractor {
+	config := DefaultLLMConfig()
+	for _, opt := range opts {
+		opt(&config)
+	}
+
+	e := &BaseLLMExtractor{
+		inferencer: inf,
+		config:     config,
+		name:       inf.Name(),
+		observer:   config.Observer,
+	}
+
+	// If the inferencer wraps a pkg/llm provider, extract it for observer support
+	if remote, ok := inf.(*inference.Remote); ok {
+		e.provider = remote.Provider()
+	}
+
+	return e
+}
+
+// ExtractorOption configures a BaseLLMExtractor created via NewFromInferencer.
+type ExtractorOption func(*LLMConfig)
+
+// WithMaxRetries sets the maximum number of retries.
+func WithMaxRetries(n int) ExtractorOption {
+	return func(c *LLMConfig) { c.MaxRetries = n }
+}
+
+// WithTemperature sets the sampling temperature.
+func WithTemperature(t float64) ExtractorOption {
+	return func(c *LLMConfig) { c.Temperature = t }
+}
+
+// WithMaxTokens sets the maximum output tokens.
+func WithMaxTokens(n int) ExtractorOption {
+	return func(c *LLMConfig) { c.MaxTokens = n }
+}
+
+// WithStrictMode enables strict JSON schema validation.
+func WithStrictMode(strict bool) ExtractorOption {
+	return func(c *LLMConfig) { c.StrictMode = strict }
+}
+
+// WithObserver sets the LLM observer for observability.
+func WithObserver(obs llm.LLMObserver) ExtractorOption {
+	return func(c *LLMConfig) { c.Observer = obs }
 }
 
 // NewBaseLLMExtractor creates a new base extractor with the given provider.
 // This is used internally by provider-specific extractors (anthropic, openai, etc.).
+//
+// Deprecated: Use NewFromInferencer instead.
 func NewBaseLLMExtractor(name string, provider llm.Provider, cfg *LLMConfig) *BaseLLMExtractor {
 	config := DefaultLLMConfig()
 	if cfg != nil {
