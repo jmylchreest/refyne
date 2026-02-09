@@ -97,3 +97,20 @@ func IsRegistered(name string) bool {
 	_, ok := registry[name]
 	return ok
 }
+
+// providerEnvKeys maps provider names to their API key environment variables.
+var providerEnvKeys = map[string]string{
+	"openrouter": "OPENROUTER_API_KEY",
+	"anthropic":  "ANTHROPIC_API_KEY",
+	"openai":     "OPENAI_API_KEY",
+	"cerebras":   "CEREBRAS_API_KEY",
+	"helicone":   "HELICONE_API_KEY",
+}
+
+// HasAPIKey checks if an API key environment variable is set for the given provider.
+func HasAPIKey(provider string) bool {
+	if envKey, ok := providerEnvKeys[provider]; ok {
+		return os.Getenv(envKey) != ""
+	}
+	return false
+}

@@ -3,7 +3,7 @@ package registry
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"os"
 	"path/filepath"
 )
@@ -94,4 +94,4 @@ func DefaultCacheDir() string {
 }
 
 // ErrModelNotFound is returned when a requested model is not in the registry.
-var ErrModelNotFound = fmt.Errorf("model not found")
+var ErrModelNotFound = errors.New("model not found")

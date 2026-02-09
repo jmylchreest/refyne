@@ -197,7 +197,7 @@ func verifySHA256(path, expected string) (bool, error) {
 	return strings.EqualFold(actual, expected), nil
 }
 
-func downloadFile(ctx context.Context, url, dest string) error {
+func downloadFile(ctx context.Context, url, dest string) (retErr error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return err
@@ -217,8 +217,13 @@ func downloadFile(ctx context.Context, url, dest string) error {
 	if err != nil {
 		return err
 	}
-	defer out.Close()
+	defer func() {
+		out.Close()
+		if retErr != nil {
+			os.Remove(dest) // Clean up partial download on error.
+		}
+	}()
 
-	_, err = io.Copy(out, resp.Body)
-	return err
+	_, retErr = io.Copy(out, resp.Body)
+	return retErr
 }

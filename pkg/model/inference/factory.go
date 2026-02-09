@@ -2,7 +2,6 @@ package inference
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/jmylchreest/refyne/pkg/llm"
 )
@@ -45,16 +44,8 @@ func DetectProviderName() (name string, apiKey string) {
 }
 
 // HasAPIKey checks if an API key is set for the given provider.
+// It delegates to the llm package's provider registry to avoid
+// duplicating env var name mappings.
 func HasAPIKey(provider string) bool {
-	envKeys := map[string]string{
-		"openrouter": "OPENROUTER_API_KEY",
-		"anthropic":  "ANTHROPIC_API_KEY",
-		"openai":     "OPENAI_API_KEY",
-		"cerebras":   "CEREBRAS_API_KEY",
-		"helicone":   "HELICONE_API_KEY",
-	}
-	if envKey, ok := envKeys[provider]; ok {
-		return os.Getenv(envKey) != ""
-	}
-	return false
+	return llm.HasAPIKey(provider)
 }

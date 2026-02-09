@@ -197,6 +197,71 @@ func (e *BaseLLMExtractor) Extract(ctx context.Context, content string, s schema
 	}, fmt.Errorf("extraction failed after %d attempts: %w", e.config.MaxRetries+1, lastErr)
 }
 
+// execute dispatches to either the inference.Inferencer or the legacy llm.Provider.
+// This keeps extractOnceWithAttempt agnostic to the backend.
+func (e *BaseLLMExtractor) execute(ctx context.Context, messages []llm.Message, jsonSchema map[string]any) (*llm.Response, error) {
+	if e.inferencer != nil && e.provider == nil {
+		// Use the inference.Inferencer path (no legacy provider available)
+		req := inference.Request{
+			MaxTokens:   e.config.MaxTokens,
+			Temperature: e.config.Temperature,
+			JSONSchema:  jsonSchema,
+			StrictMode:  e.config.StrictMode,
+		}
+		for _, msg := range messages {
+			m := inference.Message{
+				Role:    inference.Role(msg.Role),
+				Content: msg.Content,
+			}
+			if msg.CacheControl != "" {
+				m.CacheControl = string(msg.CacheControl)
+			}
+			req.Messages = append(req.Messages, m)
+		}
+
+		resp, err := e.inferencer.Infer(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+
+		return &llm.Response{
+			Content:      resp.Content,
+			Model:        resp.Model,
+			Usage:        llm.Usage{InputTokens: resp.Usage.InputTokens, OutputTokens: resp.Usage.OutputTokens},
+			Duration:     resp.Duration,
+			FinishReason: resp.FinishReason,
+			GenerationID: resp.GenerationID,
+			Cost:         resp.Cost,
+			CostIncluded: resp.CostIncluded,
+		}, nil
+	}
+
+	// Legacy llm.Provider path
+	return e.provider.Execute(ctx, llm.Request{
+		Messages:    messages,
+		MaxTokens:   e.config.MaxTokens,
+		Temperature: e.config.Temperature,
+		JSONSchema:  jsonSchema,
+		StrictMode:  e.config.StrictMode,
+	})
+}
+
+// providerName returns the name of the underlying backend for logging.
+func (e *BaseLLMExtractor) providerName() string {
+	if e.provider != nil {
+		return e.provider.Name()
+	}
+	return e.name
+}
+
+// providerModel returns the model identifier of the underlying backend.
+func (e *BaseLLMExtractor) providerModel() string {
+	if e.provider != nil {
+		return e.provider.Model()
+	}
+	return e.name
+}
+
 // extractOnceWithAttempt performs a single extraction attempt with attempt tracking for observer.
 func (e *BaseLLMExtractor) extractOnceWithAttempt(ctx context.Context, content string, s schema.Schema, previousErr error, attempt int) (*Result, error) {
 	logger.Debug("extractor building prompt",
@@ -223,22 +288,15 @@ func (e *BaseLLMExtractor) extractOnceWithAttempt(ctx context.Context, content s
 	}
 
 	logger.Debug("extractor calling LLM",
-		"provider", e.provider.Name(),
-		"model", e.provider.Model(),
+		"provider", e.providerName(),
+		"model", e.providerModel(),
 		"max_tokens", e.config.MaxTokens,
 		"temperature", e.config.Temperature,
 		"strict_mode", e.config.StrictMode)
 
-	// Track timing for observer
 	startedAt := time.Now()
 
-	resp, err := e.provider.Execute(ctx, llm.Request{
-		Messages:    messages,
-		MaxTokens:   e.config.MaxTokens,
-		Temperature: e.config.Temperature,
-		JSONSchema:  jsonSchema,
-		StrictMode:  e.config.StrictMode,
-	})
+	resp, err := e.execute(ctx, messages, jsonSchema)
 
 	duration := time.Since(startedAt)
 
@@ -246,7 +304,7 @@ func (e *BaseLLMExtractor) extractOnceWithAttempt(ctx context.Context, content s
 	if e.observer != nil {
 		event := llm.LLMCallEvent{
 			Provider:  e.name,
-			Model:     e.provider.Model(),
+			Model:     e.providerModel(),
 			Duration:  duration,
 			Attempt:   attempt,
 			StartedAt: startedAt,
@@ -264,7 +322,7 @@ func (e *BaseLLMExtractor) extractOnceWithAttempt(ctx context.Context, content s
 		}
 
 		if resp != nil {
-			event.Model = resp.Model // Use actual model from response
+			event.Model = resp.Model
 			event.Response = &llm.LLMCallResponse{
 				Content:      resp.Content,
 				InputTokens:  resp.Usage.InputTokens,
