@@ -4,8 +4,6 @@ on:
   push:
     branches: [main]
     tags: ['v*']
-  pull_request:
-    branches: [main]
 
 permissions:
   contents: write
@@ -155,6 +153,7 @@ jobs:
           name: refyne-${{ matrix.goos }}-${{ matrix.goarch }}
           path: dist/refyne-*
           if-no-files-found: error
+          retention-days: 1
 
   # Create release (only on tag push)
   release:
